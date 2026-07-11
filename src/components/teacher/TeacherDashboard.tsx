@@ -190,6 +190,20 @@ export default function TeacherDashboard() {
     }
   };
 
+  // Hàm xử lý xóa bài nộp
+  const handleDeleteSubmission = async (id: string) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa bài làm này không? Hành động này không thể hoàn tác.")) return;
+    
+    const { error: deleteError } = await supabase.from("submissions").delete().eq("id", id);
+    
+    if (deleteError) {
+      setError(`Lỗi khi xóa bài: ${deleteError.message}`);
+    } else {
+      if (selectedId === id) setSelectedId(null);
+      void loadSubmissions();
+    }
+  };
+
   if (!authChecked) {
     return <main className="min-h-screen bg-slate-100 flex items-center justify-center text-slate-500">Đang tải...</main>;
   }
@@ -346,6 +360,18 @@ export default function TeacherDashboard() {
                         <Clock className="h-3.5 w-3.5" /> Chờ học sinh nộp bài để chấm điểm.
                       </span>
                     )}
+
+                    {/* Dùng thẻ div flex-1 để đẩy nút Xóa bài sang góc bên phải */}
+                    <div className="flex-1"></div>
+                    
+                    {/* Nút Xóa bài mới thêm */}
+                    <button
+                      onClick={() => handleDeleteSubmission(selectedSubmission.id)}
+                      className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition"
+                      title="Xóa bài làm này"
+                    >
+                      <Trash2 className="h-4 w-4" /> Xóa bài
+                    </button>
                   </div>
 
                   {selectedSubmission.feedback && (
