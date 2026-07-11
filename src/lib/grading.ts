@@ -17,7 +17,6 @@ Lexical Resource, Grammatical Range and Accuracy). Respond ONLY with a JSON obje
   "examiner_summary": string
 }`;
 
-// Khởi tạo client OpenAI nhưng trỏ đường dẫn về máy chủ của Groq
 const groq = new OpenAI({ 
   apiKey: process.env.GROQ_API_KEY, 
   baseURL: "https://api.groq.com/openai/v1" 
@@ -26,8 +25,8 @@ const groq = new OpenAI({
 export async function gradeSubmission(content: string, testPrompt: string): Promise<GradingFeedback> {
   try {
     const completion = await groq.chat.completions.create({
-      // Llama 3 70B là mô hình rất thông minh của Meta, được Groq hỗ trợ chạy miễn phí
-      model: "llama3-70b-8192", 
+      // Đổi sang model mới nhất của Meta trên Groq
+      model: "llama-3.3-70b-versatile", 
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -35,9 +34,18 @@ export async function gradeSubmission(content: string, testPrompt: string): Prom
       ],
     });
 
-    return JSON.parse(completion.choices[0]?.message.content || "{}");
+    // Lấy chuỗi văn bản AI trả về
+    let responseText = completion.choices[0]?.message.content || "{}";
+    
+    // "Tẩy rửa" chuỗi nếu AI lỡ chèn thêm Markdown (rất hay gây lỗi parse)
+    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    // Dịch nó thành Object JSON
+    return JSON.parse(responseText);
+
   } catch (error) {
-    console.error("Lỗi khi chấm bài bằng Groq:", error);
-    throw new Error("Hệ thống chấm điểm AI đang bận. Vui lòng thử lại sau.");
+    // In chi tiết lỗi màu đỏ ra Terminal để bạn dễ bắt bệnh
+    console.error("🔴 LỖI CHI TIẾT TỪ GROQ:", error);
+    throw new Error("Không thể chấm điểm lúc này, vui lòng xem terminal để biết chi tiết lỗi.");
   }
 }
