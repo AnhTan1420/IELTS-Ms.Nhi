@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import Groq from "groq-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { GradingFeedback } from "@/lib/types";
 
@@ -33,17 +33,20 @@ Respond ONLY with a JSON object, no markdown fences, no preamble, matching EXACT
   ]
 }`;
 
-async function gradeWithOpenAI(content: string, testPrompt: string): Promise<GradingFeedback> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const completion = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-    response_format: { type: "json_object" },
+async function gradeWithGroq(content: string, testPrompt: string): Promise<GradingFeedback> {
+  // Khởi tạo Groq client
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  
+  const completion = await groq.chat.completions.create({
+    model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+    response_format: { type: "json_object" }, // Ép Groq trả về JSON chuẩn
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: `Prompt: ${testPrompt}\n\nEssay: ${content}` },
     ],
   });
-  return JSON.parse(completion.choices[0]?.message.content || "{}");
+  
+  return JSON.parse(completion.choices[0]?.message?.content || "{}");
 }
 
 async function gradeWithGemini(content: string, testPrompt: string): Promise<GradingFeedback> {
@@ -53,19 +56,20 @@ async function gradeWithGemini(content: string, testPrompt: string): Promise<Gra
     systemInstruction: SYSTEM_PROMPT,
     generationConfig: { responseMimeType: "application/json" },
   });
+  
   const result = await model.generateContent(`Prompt: ${testPrompt}\n\nEssay: ${content}`);
   return JSON.parse(result.response.text());
 }
 
 /**
- * Grades an essay, trying OpenAI first and falling back to Gemini.
+ * Grades an essay, trying Groq first and falling back to Gemini.
  * Throws if both providers fail.
  */
 export async function gradeSubmission(content: string, testPrompt: string): Promise<GradingFeedback> {
   try {
-    return await gradeWithOpenAI(content, testPrompt);
-  } catch (openAiError) {
-    console.warn("OpenAI grading failed, falling back to Gemini:", openAiError);
+    return await gradeWithGroq(content, testPrompt);
+  } catch (groqError) {
+    console.warn("Groq grading failed, falling back to Gemini:", groqError);
     return await gradeWithGemini(content, testPrompt);
   }
 }
