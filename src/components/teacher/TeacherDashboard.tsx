@@ -446,7 +446,7 @@ export default function TeacherDashboard() {
                       </span>
                       {submission.warning_count > 0 && (
                         <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
-                          <ShieldAlert className="h-3 w-3" /> {submission.warning_count}/3
+                          <ShieldAlert className="h-3 w-3" /> {submission.warning_count}/5
                         </span>
                       )}
                       {submission.band_score != null && (
@@ -487,7 +487,7 @@ export default function TeacherDashboard() {
                     {selectedSubmission.warning_count > 0 && (
                       <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 p-4 text-sm font-semibold text-amber-900">
                         <div className="bg-amber-100 p-2 rounded-full text-amber-600"><ShieldAlert className="h-5 w-5" /></div>
-                        Học sinh đã vi phạm quy chế thoát trang {selectedSubmission.warning_count}/3 lần!
+                        Học sinh đã vi phạm quy chế thoát trang {selectedSubmission.warning_count}/5 lần!
                       </div>
                     )}
                   </div>
