@@ -45,7 +45,7 @@ function handleDownloadDoc(studentName: string, content: string, feedback?: any)
   const header =
     "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Times New Roman', serif; line-height: 1.6; color: #1e293b; } .feedback-box { background: #f0fdfa; border: 1px solid #ccfbf1; padding: 15px; border-radius: 8px; margin-top: 20px; } .correction { background: #fff; border: 1px solid #e2e8f0; padding: 10px; margin-bottom: 10px; border-radius: 4px; } .wrong { color: #ef4444; text-decoration: line-through; } .right { color: #10b981; font-weight: bold; } .reason { color: #64748b; font-size: 0.9em; }</style></head><body>";
   const footer = "</body></html>";
-  
+
   let sourceHTML = `<h2 style="text-align:center; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Bài làm của ${studentName}</h2>`;
   sourceHTML += `<p style="white-space: pre-wrap; font-size: 11pt;">${content}</p>`;
 
@@ -53,7 +53,7 @@ function handleDownloadDoc(studentName: string, content: string, feedback?: any)
     sourceHTML += `<div class="feedback-box">`;
     sourceHTML += `<h3 style="color: #0d9488; margin-top: 0;">Kết quả chấm AI - Overall Band: ${feedback.overall_band}</h3>`;
     sourceHTML += `<p><strong>Nhận xét tổng quan:</strong> ${feedback.examiner_summary}</p>`;
-    
+
     if (feedback.corrections && feedback.corrections.length > 0) {
       sourceHTML += `<h4 style="color: #0f172a;">Chi tiết sửa lỗi:</h4>`;
       feedback.corrections.forEach((c: any) => {
@@ -99,22 +99,32 @@ export default function TeacherDashboard() {
   // Hàm xử lý Export chỉ Text
   const handleExportRawText = (studentName: string, content: string) => {
     if (!content) return;
+
+    // 1. Tạo cấu trúc HTML cho MS Word hiểu được
+    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export</title></head><body>";
+    const footer = "</body></html>";
     
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    // Sử dụng white-space: pre-wrap để giữ nguyên xuống dòng của bài làm
+    const fullHtml = `${header}<p style="white-space: pre-wrap; font-family: 'Times New Roman'; font-size: 12pt;">${content}</p>${footer}`;
+
+    // 2. Chuyển Blob type thành application/msword
+    const blob = new Blob([fullHtml], { type: "application/msword" });
     const url = URL.createObjectURL(blob);
-    
+
     const link = document.createElement("a");
     link.href = url;
-    link.download = `BaiLam_${studentName.replace(/\s+/g, "_")}.txt`;
+    // 3. Đổi đuôi file thành .doc
+    link.download = `${studentName.replace(/\s+/g, "_")}.doc`; 
+    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    // Hiển thị Toast thông báo trong 3 giây
+    // Hiển thị Toast thông báo
     setShowExportToast(true);
     setTimeout(() => setShowExportToast(false), 3000);
-  };
+};
 
   // Hàm đăng xuất
   const handleSignOut = async () => {
@@ -148,7 +158,7 @@ export default function TeacherDashboard() {
       window.removeEventListener("keydown", resetTimer);
       clearTimeout(timeoutId);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthed]);
 
   useEffect(() => {
@@ -362,25 +372,23 @@ export default function TeacherDashboard() {
             >
               <LogOut className="h-4 w-4" /> Đăng xuất
             </button>
-            
+
             {/* Tabs */}
             <div className="flex gap-2 rounded-xl bg-slate-900/80 p-1.5 border border-slate-700/50 backdrop-blur-md w-fit">
               <button
                 onClick={() => setActiveTab("submissions")}
-                className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-                  activeTab === "submissions" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5"
-                }`}
+                className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${activeTab === "submissions" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5"
+                  }`}
               >
-                <Radio className={`h-4 w-4 ${activeTab === "submissions" ? "animate-pulse" : ""}`} /> 
+                <Radio className={`h-4 w-4 ${activeTab === "submissions" ? "animate-pulse" : ""}`} />
                 Theo dõi & Chấm bài
               </button>
               <button
                 onClick={() => setActiveTab("tests")}
-                className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-                  activeTab === "tests" ? "bg-white text-slate-900 shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5"
-                }`}
+                className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${activeTab === "tests" ? "bg-white text-slate-900 shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5"
+                  }`}
               >
-                <BookOpen className="h-4 w-4" /> 
+                <BookOpen className="h-4 w-4" />
                 Quản lý đề thi
               </button>
             </div>
@@ -405,7 +413,7 @@ export default function TeacherDashboard() {
                   Bài làm <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">{submissions.length}</span>
                 </h2>
               </div>
-              
+
               <div className="space-y-3 overflow-y-auto pr-2 pb-2 custom-scrollbar">
                 {submissions.length === 0 && (
                   <div className="text-center py-12 px-4 border-2 border-dashed border-slate-100 rounded-2xl">
@@ -417,11 +425,10 @@ export default function TeacherDashboard() {
                   <button
                     key={submission.id}
                     onClick={() => setSelectedId(submission.id)}
-                    className={`w-full text-left p-4 rounded-2xl border transition-all duration-200 group ${
-                      selectedSubmission?.id === submission.id
+                    className={`w-full text-left p-4 rounded-2xl border transition-all duration-200 group ${selectedSubmission?.id === submission.id
                         ? "border-cyan-400 bg-cyan-50/50 ring-4 ring-cyan-50"
                         : "border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-sm"
-                    }`}
+                      }`}
                   >
                     <div className="flex justify-between items-start gap-2 mb-1.5">
                       <span className="font-bold text-slate-900 group-hover:text-cyan-700 transition-colors">{submission.student_name}</span>
@@ -432,7 +439,7 @@ export default function TeacherDashboard() {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 line-clamp-1 font-medium mb-3">{submission.tests?.title ?? "Đề đã bị xóa"}</p>
-                    
+
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${statusStyles[submission.status] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
                         {statusLabels[submission.status] || submission.status}
@@ -494,7 +501,7 @@ export default function TeacherDashboard() {
                           <label className="text-[15px] font-bold text-slate-800 flex items-center gap-2">
                             <FileCheck2 className="h-5 w-5 text-slate-500" /> Nội dung bài làm
                           </label>
-                          
+
                           {/* Nút Export (Chỉ hiển thị khi có nội dung) */}
                           {selectedSubmission.content && (
                             <div className="relative flex items-center">
@@ -505,7 +512,7 @@ export default function TeacherDashboard() {
                               >
                                 <Download className="h-4 w-4" />
                               </button>
-                              
+
                               {/* Toast Notification (Mini tooltip hiện khi xuất thành công) */}
                               {showExportToast && (
                                 <span className="absolute left-full ml-2 whitespace-nowrap bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded shadow-sm animate-in fade-in slide-in-from-left-2 z-10">
@@ -522,7 +529,7 @@ export default function TeacherDashboard() {
                           </span>
                         )}
                       </div>
-                      
+
                       {/* Giao diện Đọc bài được nâng cấp */}
                       <div className="whitespace-pre-wrap font-serif text-[16px] leading-[2.2] bg-[#fcfcfc] border border-slate-300 rounded-xl px-8 py-8 shadow-inner min-h-[300px] text-slate-800 tracking-wide selection:bg-cyan-200">
                         {selectedSubmission.content?.trim() || <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa nhập nội dung nào...</span>}
@@ -863,16 +870,17 @@ export default function TeacherDashboard() {
                   <div className="bg-white p-4 rounded-full shadow-sm border border-slate-100 mb-4">
                     <BookOpen className="h-8 w-8 text-cyan-200" />
                   </div>
-                  <p className="text-sm font-medium">Bấm vào nút <strong className="text-slate-700">"Soạn đề mới"</strong><br/>hoặc chọn đề từ danh sách để bắt đầu.</p>
+                  <p className="text-sm font-medium">Bấm vào nút <strong className="text-slate-700">"Soạn đề mới"</strong><br />hoặc chọn đề từ danh sách để bắt đầu.</p>
                 </div>
               )}
             </div>
           </section>
         )}
       </div>
-      
+
       {/* Thêm chút CSS cho thanh cuộn (Scrollbar) nhìn mượt hơn */}
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
