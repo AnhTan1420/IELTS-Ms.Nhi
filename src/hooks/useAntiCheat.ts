@@ -45,7 +45,7 @@ export function useAntiCheat({
 
       // Debounce: 50ms to group blur + visibilitychange events (fire ~10-20ms apart)
       const now = Date.now();
-      if (now - lastViolationTimeRef.current < 50) {
+      if (now - lastViolationTimeRef.current < 200) {
         return;
       }
       lastViolationTimeRef.current = now;
