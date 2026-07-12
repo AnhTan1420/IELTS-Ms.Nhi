@@ -315,10 +315,7 @@ export default function StudentTest({
                   placeholder="Nhập bài làm tiếng Anh..."
                   value={task1Answer}
                   onChange={(e) => setTask1Answer(e.target.value)}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    alert("Không được phép Paste bài!");
-                  }}
+                  
                 />
                 <div className="text-right mt-2 text-xs font-medium text-slate-500">
                   Word count: {task1Answer.trim().split(/\s+/).filter((w) => w.length > 0).length}
@@ -342,10 +339,7 @@ export default function StudentTest({
                   placeholder="Nhập bài làm tiếng Anh..."
                   value={task2Answer}
                   onChange={(e) => setTask2Answer(e.target.value)}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    alert("Không được phép Paste bài!");
-                  }}
+                  
                 />
                 <div className="text-right mt-2 text-xs font-medium text-slate-500">
                   Word count: {task2Answer.trim().split(/\s+/).filter((w) => w.length > 0).length}
