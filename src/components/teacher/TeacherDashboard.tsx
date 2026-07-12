@@ -20,10 +20,12 @@ import {
   Radio,
   Loader2,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { SubmissionRow, TestRow } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
 const statusStyles: Record<string, string> = {
   in_progress: "bg-blue-50 text-blue-700 border-blue-200",
@@ -89,6 +91,41 @@ export default function TeacherDashboard() {
   const [isSavingTest, setIsSavingTest] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Hàm đăng xuất
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push("/login"); // Chuyển về trang login
+  };
+
+// Logic Auto Sign Out sau 30 phút (1,800,000 ms)
+useEffect(() => {
+  if (!isAuthed) return;
+
+  let timeoutId: NodeJS.Timeout;
+
+  const resetTimer = () => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      handleSignOut();
+      alert("Phiên làm việc đã hết hạn sau 30 phút không hoạt động.");
+    }, 1000 * 60 * 30); // 30 phút
+  };
+
+  // Lắng nghe các hành động của người dùng
+  window.addEventListener("mousemove", resetTimer);
+  window.addEventListener("keydown", resetTimer);
+
+  // Khởi tạo bộ đếm lần đầu
+  resetTimer();
+
+  return () => {
+    window.removeEventListener("mousemove", resetTimer);
+    window.removeEventListener("keydown", resetTimer);
+    clearTimeout(timeoutId);
+  };
+}, [isAuthed]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -295,6 +332,12 @@ export default function TeacherDashboard() {
               </div>
               <p className="text-slate-400 text-sm">Quản lý đề thi và theo dõi tiến độ làm bài của học viên theo thời gian thực.</p>
             </div>
+            <button
+  onClick={handleSignOut}
+  className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-400 hover:text-red-300 transition-colors bg-red-950/30 border border-red-900/50 rounded-xl"
+>
+  <LogOut className="h-4 w-4" /> Đăng xuất
+</button>
             
             {/* Tabs */}
             <div className="flex gap-2 rounded-xl bg-slate-900/80 p-1.5 border border-slate-700/50 backdrop-blur-md w-fit">
