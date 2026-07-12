@@ -21,7 +21,8 @@ import {
   Loader2,
   Sparkles,
   ChevronRight,
-  LogOut
+  LogOut,
+  Download // Đã import thêm icon Download
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { SubmissionRow, TestRow } from "@/lib/types";
@@ -91,7 +92,29 @@ export default function TeacherDashboard() {
   const [isSavingTest, setIsSavingTest] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showExportToast, setShowExportToast] = useState(false); // State cho Toast Export Text
+
   const router = useRouter();
+
+  // Hàm xử lý Export chỉ Text
+  const handleExportRawText = (studentName: string, content: string) => {
+    if (!content) return;
+    
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `BaiLam_${studentName.replace(/\s+/g, "_")}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    // Hiển thị Toast thông báo trong 3 giây
+    setShowExportToast(true);
+    setTimeout(() => setShowExportToast(false), 3000);
+  };
 
   // Hàm đăng xuất
   const handleSignOut = async () => {
@@ -99,33 +122,34 @@ export default function TeacherDashboard() {
     router.push("/login"); // Chuyển về trang login
   };
 
-// Logic Auto Sign Out sau 30 phút (1,800,000 ms)
-useEffect(() => {
-  if (!isAuthed) return;
+  // Logic Auto Sign Out sau 30 phút (1,800,000 ms)
+  useEffect(() => {
+    if (!isAuthed) return;
 
-  let timeoutId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout;
 
-  const resetTimer = () => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      handleSignOut();
-      alert("Phiên làm việc đã hết hạn sau 30 phút không hoạt động.");
-    }, 1000 * 60 * 30); // 30 phút
-  };
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleSignOut();
+        alert("Phiên làm việc đã hết hạn sau 30 phút không hoạt động.");
+      }, 1000 * 60 * 30); // 30 phút
+    };
 
-  // Lắng nghe các hành động của người dùng
-  window.addEventListener("mousemove", resetTimer);
-  window.addEventListener("keydown", resetTimer);
+    // Lắng nghe các hành động của người dùng
+    window.addEventListener("mousemove", resetTimer);
+    window.addEventListener("keydown", resetTimer);
 
-  // Khởi tạo bộ đếm lần đầu
-  resetTimer();
+    // Khởi tạo bộ đếm lần đầu
+    resetTimer();
 
-  return () => {
-    window.removeEventListener("mousemove", resetTimer);
-    window.removeEventListener("keydown", resetTimer);
-    clearTimeout(timeoutId);
-  };
-}, [isAuthed]);
+    return () => {
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("keydown", resetTimer);
+      clearTimeout(timeoutId);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthed]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -333,11 +357,11 @@ useEffect(() => {
               <p className="text-slate-400 text-sm">Quản lý đề thi và theo dõi tiến độ làm bài của học viên theo thời gian thực.</p>
             </div>
             <button
-  onClick={handleSignOut}
-  className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-400 hover:text-red-300 transition-colors bg-red-950/30 border border-red-900/50 rounded-xl"
->
-  <LogOut className="h-4 w-4" /> Đăng xuất
-</button>
+              onClick={handleSignOut}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-400 hover:text-red-300 transition-colors bg-red-950/30 border border-red-900/50 rounded-xl"
+            >
+              <LogOut className="h-4 w-4" /> Đăng xuất
+            </button>
             
             {/* Tabs */}
             <div className="flex gap-2 rounded-xl bg-slate-900/80 p-1.5 border border-slate-700/50 backdrop-blur-md w-fit">
@@ -464,18 +488,44 @@ useEffect(() => {
                   {/* Submission Body */}
                   <div className="p-6 space-y-8 bg-slate-50/30">
                     <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <label className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                          <FileCheck2 className="h-4 w-4 text-slate-400" /> Nội dung bài viết
-                        </label>
+                      <div className="flex items-center justify-between mb-4 border-b border-slate-200/80 pb-3">
+                        {/* Cấu trúc Flexbox: Tiêu đề + Nút Export nằm cạnh nhau */}
+                        <div className="flex items-center gap-2">
+                          <label className="text-[15px] font-bold text-slate-800 flex items-center gap-2">
+                            <FileCheck2 className="h-5 w-5 text-slate-500" /> Nội dung bài làm
+                          </label>
+                          
+                          {/* Nút Export (Chỉ hiển thị khi có nội dung) */}
+                          {selectedSubmission.content && (
+                            <div className="relative flex items-center">
+                              <button
+                                onClick={() => handleExportRawText(selectedSubmission.student_name, selectedSubmission.content ?? "")}
+                                className="group p-1.5 rounded-lg text-slate-400 hover:bg-cyan-50 hover:text-cyan-600 hover:shadow-sm border border-transparent hover:border-cyan-200 transition-all"
+                                title="Xuất bài làm (Chỉ văn bản)"
+                              >
+                                <Download className="h-4 w-4" />
+                              </button>
+                              
+                              {/* Toast Notification (Mini tooltip hiện khi xuất thành công) */}
+                              {showExportToast && (
+                                <span className="absolute left-full ml-2 whitespace-nowrap bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded shadow-sm animate-in fade-in slide-in-from-left-2 z-10">
+                                  Đã xuất file!
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
                         {selectedSubmission.status === "in_progress" && (
                           <span className="flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
                             <Radio className="h-3.5 w-3.5 animate-pulse" /> Đang Live...
                           </span>
                         )}
                       </div>
-                      <div className="whitespace-pre-wrap font-serif text-[15px] leading-relaxed bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm min-h-[200px] text-slate-700">
-                        {selectedSubmission.content?.trim() || <span className="text-slate-400 italic">Học sinh chưa nhập nội dung nào...</span>}
+                      
+                      {/* Giao diện Đọc bài được nâng cấp */}
+                      <div className="whitespace-pre-wrap font-serif text-[16px] leading-[2.2] bg-[#fcfcfc] border border-slate-300 rounded-xl px-8 py-8 shadow-inner min-h-[300px] text-slate-800 tracking-wide selection:bg-cyan-200">
+                        {selectedSubmission.content?.trim() || <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa nhập nội dung nào...</span>}
                       </div>
                     </div>
 
