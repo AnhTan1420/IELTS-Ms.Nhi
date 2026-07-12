@@ -6,6 +6,7 @@ import {
   Bot,
   Clock,
   FileCheck2,
+  FileDown,
   ShieldAlert,
   Users,
   Plus,
@@ -35,6 +36,24 @@ const statusLabels: Record<string, string> = {
   disqualified: "Bị loại (gian lận)",
 };
 
+// Native .doc export — no external library. Word opens this HTML-as-.doc file just fine.
+function handleDownloadDoc(studentName: string, content: string) {
+  const header =
+    "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title></head><body>";
+  const footer = "</body></html>";
+  const sourceHTML =
+    header +
+    `<h2 style="text-align:center;">Bài làm của ${studentName}</h2><p style="white-space: pre-wrap;">${content}</p>` +
+    footer;
+  const source = "data:application/vnd.ms-word;charset=utf-8," + encodeURIComponent(sourceHTML);
+  const fileDownload = document.createElement("a");
+  document.body.appendChild(fileDownload);
+  fileDownload.href = source;
+  fileDownload.download = `IELTS_Writing_${studentName.replace(/\s+/g, "_")}.doc`;
+  fileDownload.click();
+  document.body.removeChild(fileDownload);
+}
+
 export default function TeacherDashboard() {
   const [authChecked, setAuthChecked] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
@@ -44,6 +63,7 @@ export default function TeacherDashboard() {
   const [tests, setTests] = useState<TestRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isGrading, setIsGrading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [editingTest, setEditingTest] = useState<Partial<TestRow> | null>(null);
@@ -82,8 +102,10 @@ export default function TeacherDashboard() {
   useEffect(() => {
     if (!isAuthed) return;
 
-    void loadSubmissions();
-    void loadTests();
+    const load = async () => {
+      await Promise.all([loadSubmissions(), loadTests()]);
+    };
+    void load();
 
     // Realtime feed: every keystroke autosave and every warning shows up here instantly,
     // which is how the teacher "watches" a student write and gets notified on submit.
@@ -190,18 +212,18 @@ export default function TeacherDashboard() {
     }
   };
 
-  // Hàm xử lý xóa bài nộp
-  const handleDeleteSubmission = async (id: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa bài làm này không? Hành động này không thể hoàn tác.")) return;
-    
-    const { error: deleteError } = await supabase.from("submissions").delete().eq("id", id);
-    
-    if (deleteError) {
-      setError(`Lỗi khi xóa bài: ${deleteError.message}`);
-    } else {
-      if (selectedId === id) setSelectedId(null);
-      void loadSubmissions();
-    }
+  const handleDeleteSubmission = async (submission: SubmissionRow) => {
+    if (!window.confirm(`Xóa vĩnh viễn bài làm của "${submission.student_name}"?`)) return;
+    setIsDeleting(true);
+    setError(null);
+
+    const { error: deleteError } = await supabase.from("submissions").delete().eq("id", submission.id);
+
+    setIsDeleting(false);
+    if (deleteError) return setError(deleteError.message);
+
+    if (selectedId === submission.id) setSelectedId(null);
+    void loadSubmissions();
   };
 
   if (!authChecked) {
@@ -312,22 +334,16 @@ export default function TeacherDashboard() {
               {!selectedSubmission ? (
                 <div className="text-center py-24 text-slate-500">Chọn một bài làm ở danh sách bên trái.</div>
               ) : (
-                <div className="space-y-5">
+                <div className="space-y-6">
+                  {/* Header */}
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
                     <div>
                       <h2 className="text-xl font-bold">{selectedSubmission.student_name}</h2>
                       <p className="text-sm text-slate-500">{selectedSubmission.tests?.title}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${statusStyles[selectedSubmission.status]}`}>
-                        {statusLabels[selectedSubmission.status]}
-                      </span>
-                      {selectedSubmission.status === "in_progress" && (
-                        <span className="flex items-center gap-1 text-xs font-bold text-blue-600">
-                          <Radio className="h-3.5 w-3.5 animate-pulse" /> Đang cập nhật trực tiếp
-                        </span>
-                      )}
-                    </div>
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${statusStyles[selectedSubmission.status]}`}>
+                      {statusLabels[selectedSubmission.status]}
+                    </span>
                   </div>
 
                   {selectedSubmission.warning_count > 0 && (
@@ -336,15 +352,22 @@ export default function TeacherDashboard() {
                     </div>
                   )}
 
+                  {/* Nội dung bài làm — trình bày như tờ giấy thi */}
                   <div>
-                    <label className="text-sm font-semibold text-slate-700 mb-2 block flex items-center gap-2">
+                    <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                       <FileCheck2 className="h-4 w-4" /> Nội dung bài làm
+                      {selectedSubmission.status === "in_progress" && (
+                        <span className="flex items-center gap-1 text-xs font-bold text-blue-600">
+                          <Radio className="h-3.5 w-3.5 animate-pulse" /> Đang cập nhật trực tiếp
+                        </span>
+                      )}
                     </label>
-                    <pre className="whitespace-pre-wrap font-serif text-sm leading-relaxed bg-slate-50 border border-slate-200 rounded-2xl p-4 max-h-[420px] overflow-auto">
+                    <div className="whitespace-pre-wrap font-serif text-[15px] leading-8 bg-slate-50 border border-slate-200 rounded-2xl p-6 max-h-[420px] overflow-auto">
                       {selectedSubmission.content?.trim() || "Học sinh chưa nhập nội dung nào..."}
-                    </pre>
+                    </div>
                   </div>
 
+                  {/* Hành động */}
                   <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
                     <button
                       onClick={() => handleGrade(selectedSubmission)}
@@ -354,33 +377,131 @@ export default function TeacherDashboard() {
                       {isGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
                       {selectedSubmission.feedback ? "Chấm lại bằng AI" : "Chấm bằng AI"}
                     </button>
-                    {selectedSubmission.feedback && <FeedbackExport submission={selectedSubmission} />}
-                    {selectedSubmission.status === "in_progress" && (
-                      <span className="text-xs text-slate-400 flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" /> Chờ học sinh nộp bài để chấm điểm.
-                      </span>
-                    )}
 
-                    {/* Dùng thẻ div flex-1 để đẩy nút Xóa bài sang góc bên phải */}
-                    <div className="flex-1"></div>
-                    
-                    {/* Nút Xóa bài mới thêm */}
+                    {selectedSubmission.feedback && <FeedbackExport submission={selectedSubmission} />}
+
                     <button
-                      onClick={() => handleDeleteSubmission(selectedSubmission.id)}
-                      className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition"
-                      title="Xóa bài làm này"
+                      onClick={() =>
+                        handleDownloadDoc(selectedSubmission.student_name, selectedSubmission.content ?? "")
+                      }
+                      disabled={!selectedSubmission.content}
+                      className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                    >
+                      <FileDown className="h-4 w-4" /> Tải file DOC
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteSubmission(selectedSubmission)}
+                      disabled={isDeleting}
+                      className="ml-auto flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
                     >
                       <Trash2 className="h-4 w-4" /> Xóa bài
                     </button>
+
+                    {selectedSubmission.status === "in_progress" && (
+                      <span className="text-xs text-slate-400 flex items-center gap-1 basis-full">
+                        <Clock className="h-3.5 w-3.5" /> Chờ học sinh nộp bài để chấm điểm.
+                      </span>
+                    )}
                   </div>
 
+                  {/* Kết quả chấm AI */}
                   {selectedSubmission.feedback && (
-                    <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 space-y-3">
+                    <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 space-y-5">
                       <div className="flex items-center justify-between">
                         <h3 className="font-bold text-cyan-900">Kết quả chấm AI</h3>
-                        <span className="text-2xl font-bold text-cyan-900">Band {selectedSubmission.feedback.band_score}</span>
+                        <span className="text-2xl font-bold text-cyan-900">
+                          Band {selectedSubmission.feedback.overall_band}
+                        </span>
                       </div>
                       <p className="text-sm text-cyan-950">{selectedSubmission.feedback.examiner_summary}</p>
+
+                      {/* Điểm theo tiêu chí, chia cột Task 1 / Task 2 */}
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {selectedSubmission.feedback.task1 && (
+                          <div className="rounded-xl bg-white border border-cyan-100 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="font-bold text-slate-800">Task 1</span>
+                              <span className="rounded-full bg-cyan-100 text-cyan-900 text-sm font-bold px-2.5 py-0.5">
+                                Band {selectedSubmission.feedback.task1.band}
+                              </span>
+                            </div>
+                            <dl className="space-y-1.5 text-sm">
+                              <div className="flex justify-between">
+                                <dt className="text-slate-500">Task Achievement (TA)</dt>
+                                <dd className="font-semibold">{selectedSubmission.feedback.task1.TA}</dd>
+                              </div>
+                              <div className="flex justify-between">
+                                <dt className="text-slate-500">Coherence & Cohesion (CC)</dt>
+                                <dd className="font-semibold">{selectedSubmission.feedback.task1.CC}</dd>
+                              </div>
+                              <div className="flex justify-between">
+                                <dt className="text-slate-500">Lexical Resource (LR)</dt>
+                                <dd className="font-semibold">{selectedSubmission.feedback.task1.LR}</dd>
+                              </div>
+                              <div className="flex justify-between">
+                                <dt className="text-slate-500">Grammar Range & Accuracy (GRA)</dt>
+                                <dd className="font-semibold">{selectedSubmission.feedback.task1.GRA}</dd>
+                              </div>
+                            </dl>
+                          </div>
+                        )}
+
+                        {selectedSubmission.feedback.task2 && (
+                          <div className="rounded-xl bg-white border border-cyan-100 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="font-bold text-slate-800">Task 2</span>
+                              <span className="rounded-full bg-cyan-100 text-cyan-900 text-sm font-bold px-2.5 py-0.5">
+                                Band {selectedSubmission.feedback.task2.band}
+                              </span>
+                            </div>
+                            <dl className="space-y-1.5 text-sm">
+                              <div className="flex justify-between">
+                                <dt className="text-slate-500">Task Response (TR)</dt>
+                                <dd className="font-semibold">{selectedSubmission.feedback.task2.TR}</dd>
+                              </div>
+                              <div className="flex justify-between">
+                                <dt className="text-slate-500">Coherence & Cohesion (CC)</dt>
+                                <dd className="font-semibold">{selectedSubmission.feedback.task2.CC}</dd>
+                              </div>
+                              <div className="flex justify-between">
+                                <dt className="text-slate-500">Lexical Resource (LR)</dt>
+                                <dd className="font-semibold">{selectedSubmission.feedback.task2.LR}</dd>
+                              </div>
+                              <div className="flex justify-between">
+                                <dt className="text-slate-500">Grammar Range & Accuracy (GRA)</dt>
+                                <dd className="font-semibold">{selectedSubmission.feedback.task2.GRA}</dd>
+                              </div>
+                            </dl>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sửa lỗi dạng Diff: Đỏ (gốc) -> Xanh (sửa) -> Giải thích */}
+                      {selectedSubmission.feedback.corrections.length > 0 && (
+                        <div>
+                          <h4 className="font-bold text-cyan-900 mb-3">Lỗi và đề xuất sửa</h4>
+                          <div className="space-y-3">
+                            {selectedSubmission.feedback.corrections.map((correction, index) => (
+                              <div
+                                key={`${correction.original}-${index}`}
+                                className="rounded-xl bg-white border border-slate-200 p-4 space-y-2"
+                              >
+                                <p className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-800 line-through decoration-red-400">
+                                  {correction.original}
+                                </p>
+                                <p className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm text-emerald-800 font-medium">
+                                  {correction.corrected}
+                                </p>
+                                <p className="flex items-start gap-2 text-xs text-slate-600">
+                                  <Bot className="h-4 w-4 shrink-0 text-slate-400 mt-0.5" />
+                                  {correction.explanation}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

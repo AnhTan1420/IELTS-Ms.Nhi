@@ -18,25 +18,34 @@ export type TestRow = {
 export type SubmissionStatus = "in_progress" | "completed" | "disqualified";
 export type EndReason = "manual" | "timeout" | "disqualified";
 
+export type Task1Score = {
+  band: number;
+  TA: number;
+  CC: number;
+  LR: number;
+  GRA: number;
+};
+
+export type Task2Score = {
+  band: number;
+  TR: number;
+  CC: number;
+  LR: number;
+  GRA: number;
+};
+
+export type Correction = {
+  original: string;
+  corrected: string;
+  explanation: string;
+};
+
 export type GradingFeedback = {
-  band_score: number;
-  mistakes: Array<{
-    original: string;
-    correction: string;
-    explanation: string;
-  }>;
-  notable_vocabulary: Array<{
-    word: string;
-    context: string;
-    meaning: string;
-  }>;
-  criteria_feedback: {
-    task_response: string;
-    coherence_and_cohesion: string;
-    lexical_resource: string;
-    grammatical_range_and_accuracy: string;
-  };
+  overall_band: number;
   examiner_summary: string;
+  task1: Task1Score | null;
+  task2: Task2Score | null;
+  corrections: Correction[];
 };
 
 export type SubmissionRow = {

@@ -53,7 +53,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const feedback = await gradeSubmission(content, testPrompt);
       await supabaseAdmin
         .from("submissions")
-        .update({ feedback, band_score: feedback.band_score })
+        .update({ feedback, band_score: feedback.overall_band })
         .eq("id", id);
     }
   } catch (gradeError) {
