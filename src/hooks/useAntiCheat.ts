@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Cập nhật số lần cảnh cáo tối đa lên 5
 const MAX_WARNINGS = 5;
 
 type AntiCheatReason = "tab_hidden" | "window_blur" | "fullscreen_exit";
@@ -27,8 +26,8 @@ export function useAntiCheat({
   const reportingRef = useRef(false);
   const lastReasonAtRef = useRef(0);
   
-  // Ref dùng để bỏ qua kiểm tra blur khi người dùng copy/paste hoặc click chuột phải
   const bypassBlurRef = useRef(false);
+  const bypassTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const enterFullscreen = useCallback(async () => {
     if (!document.fullscreenElement) {
@@ -38,15 +37,10 @@ export function useAntiCheat({
 
   const reportViolation = useCallback(
     async (reason: AntiCheatReason) => {
-      if (!enabled || !submissionId || isLocked || reportingRef.current) {
-        return;
-      }
+      if (!enabled || !submissionId || isLocked || reportingRef.current) return;
 
       const now = Date.now();
-      // Tránh việc spam API nếu các sự kiện nổ ra quá gần nhau (1.2s)
-      if (now - lastReasonAtRef.current < 1200) {
-        return;
-      }
+      if (now - lastReasonAtRef.current < 1200) return;
 
       reportingRef.current = true;
       lastReasonAtRef.current = now;
@@ -65,8 +59,6 @@ export function useAntiCheat({
         setWarnings(data.warningCount);
         onWarning?.(data.warningCount, reason);
 
-        // Frontend tự động khóa nếu số lần cảnh cáo đạt mức MAX_WARNINGS (5 lần)
-        // hoặc khi backend trả về status disqualified
         if (data.status === "disqualified" || data.warningCount >= MAX_WARNINGS) {
           setIsLocked(true);
           onDisqualified();
@@ -82,26 +74,25 @@ export function useAntiCheat({
     if (!enabled) return;
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        void reportViolation("tab_hidden");
-      }
+      if (document.visibilityState === "hidden") void reportViolation("tab_hidden");
     };
 
-    // Kích hoạt chế độ bỏ qua phạt blur trong 300ms khi dùng copy/paste/chuột phải
+    // Hàm bỏ qua cảnh cáo tạm thời (Bypass)
     const triggerBypass = () => {
       bypassBlurRef.current = true;
-      setTimeout(() => {
+      if (bypassTimeoutRef.current) clearTimeout(bypassTimeoutRef.current);
+      // Cho người dùng 1.5 giây an toàn để thực hiện copy/paste mà không bị cảnh cáo
+      bypassTimeoutRef.current = setTimeout(() => {
         bypassBlurRef.current = false;
-      }, 300);
+      }, 1500); 
     };
 
     const handleBlur = () => {
-      // Đặt timeout 50ms để đồng bộ hóa chính xác với thời điểm bypassBlurRef bật lên
       setTimeout(() => {
         if (document.visibilityState === "visible" && !bypassBlurRef.current) {
           void reportViolation("window_blur");
         }
-      }, 50);
+      }, 100);
     };
 
     const handleFocus = () => {
@@ -114,26 +105,42 @@ export function useAntiCheat({
       }
     };
 
-    // Lắng nghe các sự kiện cửa sổ
+    // Bắt sự kiện TỪ SỚM (Chuột phải hoặc giữ Ctrl/Cmd)
+    const handleEarlyInteraction = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof MouseEvent && e.button === 2) triggerBypass(); // Click chuột phải
+      if (e instanceof KeyboardEvent && (e.ctrlKey || e.metaKey)) triggerBypass(); // Bấm Ctrl hoặc Cmd
+    };
+
+    // Ép hệ thống cho phép Copy/Paste (Stop propagation của các hàm chặn khác nếu có)
+    const forceAllowEvent = (e: Event) => {
+      e.stopPropagation();
+      triggerBypass();
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     window.addEventListener("blur", handleBlur);
     window.addEventListener("focus", handleFocus);
 
-    // Lắng nghe các sự kiện copy, paste và menu chuột phải để cho phép người dùng thao tác
-    window.addEventListener("contextmenu", triggerBypass);
-    window.addEventListener("copy", triggerBypass);
-    window.addEventListener("paste", triggerBypass);
+    // Lắng nghe chuột và phím
+    window.addEventListener("mousedown", handleEarlyInteraction);
+    window.addEventListener("keydown", handleEarlyInteraction);
+
+    // Gắn capture phase để ghi đè mọi hàm block copy/paste ở cấp window
+    window.addEventListener("contextmenu", forceAllowEvent, { capture: true });
+    window.addEventListener("copy", forceAllowEvent, { capture: true });
+    window.addEventListener("paste", forceAllowEvent, { capture: true });
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
-      
-      window.removeEventListener("contextmenu", triggerBypass);
-      window.removeEventListener("copy", triggerBypass);
-      window.removeEventListener("paste", triggerBypass);
+      window.removeEventListener("mousedown", handleEarlyInteraction);
+      window.removeEventListener("keydown", handleEarlyInteraction);
+      window.removeEventListener("contextmenu", forceAllowEvent, { capture: true });
+      window.removeEventListener("copy", forceAllowEvent, { capture: true });
+      window.removeEventListener("paste", forceAllowEvent, { capture: true });
     };
   }, [enabled, reportViolation]);
 
