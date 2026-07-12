@@ -36,7 +36,7 @@ const statusLabels: Record<string, string> = {
   disqualified: "Bị loại (gian lận)",
 };
 
-// Native .doc export — no external library. Word opens this HTML-as-.doc file just fine.
+// Native .doc export — no external library.
 function handleDownloadDoc(studentName: string, content: string) {
   const header =
     "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title></head><body>";
@@ -84,19 +84,27 @@ export default function TeacherDashboard() {
   );
 
   const loadTests = async () => {
-    const { data, error: testError } = await supabase.from("tests").select("*").order("created_at", { ascending: false });
-    if (testError) setError(testError.message);
-    else setTests((data ?? []) as TestRow[]);
+    try {
+      const { data, error: testError } = await supabase.from("tests").select("*").order("created_at", { ascending: false });
+      if (testError) setError(testError.message);
+      else setTests((data ?? []) as TestRow[]);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const loadSubmissions = async () => {
-    const { data, error: loadError } = await supabase
-      .from("submissions")
-      .select("*, tests(title, task1_prompt, task2_prompt, duration_minutes)")
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error: loadError } = await supabase
+        .from("submissions")
+        .select("*, tests(title, task1_prompt, task2_prompt, duration_minutes)")
+        .order("created_at", { ascending: false });
 
-    if (loadError) return setError(loadError.message);
-    setSubmissions((data ?? []) as SubmissionRow[]);
+      if (loadError) return setError(loadError.message);
+      setSubmissions((data ?? []) as SubmissionRow[]);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   useEffect(() => {
@@ -107,8 +115,6 @@ export default function TeacherDashboard() {
     };
     void load();
 
-    // Realtime feed: every keystroke autosave and every warning shows up here instantly,
-    // which is how the teacher "watches" a student write and gets notified on submit.
     const channel = supabase
       .channel("teacher-submissions")
       .on("postgres_changes", { event: "*", schema: "public", table: "submissions" }, () => void loadSubmissions())
@@ -281,7 +287,6 @@ export default function TeacherDashboard() {
 
         {activeTab === "submissions" && (
           <section className="grid gap-6 lg:grid-cols-[380px_1fr]">
-            {/* Danh sách bài làm / bài nộp */}
             <div className="rounded-3xl bg-white p-4 shadow-sm border border-slate-200 h-fit max-h-[75vh] overflow-auto">
               <div className="flex items-center justify-between px-2 pb-3 mb-2 border-b">
                 <h2 className="text-lg font-bold">Bài làm ({submissions.length})</h2>
@@ -310,8 +315,8 @@ export default function TeacherDashboard() {
                     </div>
                     <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{submission.tests?.title ?? "Đề đã xóa"}</p>
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusStyles[submission.status]}`}>
-                        {statusLabels[submission.status]}
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusStyles[submission.status] || "bg-slate-100 text-slate-700"}`}>
+                        {statusLabels[submission.status] || submission.status}
                       </span>
                       {submission.warning_count > 0 && (
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 flex items-center gap-1">
@@ -329,20 +334,18 @@ export default function TeacherDashboard() {
               </div>
             </div>
 
-            {/* Chi tiết bài làm */}
             <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
               {!selectedSubmission ? (
                 <div className="text-center py-24 text-slate-500">Chọn một bài làm ở danh sách bên trái.</div>
               ) : (
                 <div className="space-y-6">
-                  {/* Header */}
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
                     <div>
                       <h2 className="text-xl font-bold">{selectedSubmission.student_name}</h2>
                       <p className="text-sm text-slate-500">{selectedSubmission.tests?.title}</p>
                     </div>
-                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${statusStyles[selectedSubmission.status]}`}>
-                      {statusLabels[selectedSubmission.status]}
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${statusStyles[selectedSubmission.status] || "bg-slate-100"}`}>
+                      {statusLabels[selectedSubmission.status] || selectedSubmission.status}
                     </span>
                   </div>
 
@@ -352,7 +355,6 @@ export default function TeacherDashboard() {
                     </div>
                   )}
 
-                  {/* Nội dung bài làm — trình bày như tờ giấy thi */}
                   <div>
                     <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                       <FileCheck2 className="h-4 w-4" /> Nội dung bài làm
@@ -367,7 +369,6 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
 
-                  {/* Hành động */}
                   <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
                     <button
                       onClick={() => handleGrade(selectedSubmission)}
@@ -405,7 +406,6 @@ export default function TeacherDashboard() {
                     )}
                   </div>
 
-                  {/* Kết quả chấm AI */}
                   {selectedSubmission.feedback && (
                     <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 space-y-5">
                       <div className="flex items-center justify-between">
@@ -416,7 +416,6 @@ export default function TeacherDashboard() {
                       </div>
                       <p className="text-sm text-cyan-950">{selectedSubmission.feedback.examiner_summary}</p>
 
-                      {/* Điểm theo tiêu chí, chia cột Task 1 / Task 2 */}
                       <div className="grid gap-4 sm:grid-cols-2">
                         {selectedSubmission.feedback.task1 && (
                           <div className="rounded-xl bg-white border border-cyan-100 p-4">
@@ -440,7 +439,7 @@ export default function TeacherDashboard() {
                                 <dd className="font-semibold">{selectedSubmission.feedback.task1.LR}</dd>
                               </div>
                               <div className="flex justify-between">
-                                <dt className="text-slate-500">Grammar Range & Accuracy (GRA)</dt>
+                                <dt className="text-slate-500">Grammar Range (GRA)</dt>
                                 <dd className="font-semibold">{selectedSubmission.feedback.task1.GRA}</dd>
                               </div>
                             </dl>
@@ -469,7 +468,7 @@ export default function TeacherDashboard() {
                                 <dd className="font-semibold">{selectedSubmission.feedback.task2.LR}</dd>
                               </div>
                               <div className="flex justify-between">
-                                <dt className="text-slate-500">Grammar Range & Accuracy (GRA)</dt>
+                                <dt className="text-slate-500">Grammar Range (GRA)</dt>
                                 <dd className="font-semibold">{selectedSubmission.feedback.task2.GRA}</dd>
                               </div>
                             </dl>
@@ -477,14 +476,14 @@ export default function TeacherDashboard() {
                         )}
                       </div>
 
-                      {/* Sửa lỗi dạng Diff: Đỏ (gốc) -> Xanh (sửa) -> Giải thích */}
-                      {selectedSubmission.feedback.corrections.length > 0 && (
+                      {/* FIXED: Thêm Optional Chaining để chống sập nếu AI không có corrections */}
+                      {selectedSubmission.feedback.corrections && selectedSubmission.feedback.corrections.length > 0 && (
                         <div>
                           <h4 className="font-bold text-cyan-900 mb-3">Lỗi và đề xuất sửa</h4>
                           <div className="space-y-3">
                             {selectedSubmission.feedback.corrections.map((correction, index) => (
                               <div
-                                key={`${correction.original}-${index}`}
+                                key={`${index}`}
                                 className="rounded-xl bg-white border border-slate-200 p-4 space-y-2"
                               >
                                 <p className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-800 line-through decoration-red-400">
@@ -560,7 +559,6 @@ export default function TeacherDashboard() {
                     />
                   </div>
 
-                  {/* Task 1: prompt + image */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                     <div className="flex items-center gap-2 font-bold text-slate-800">
                       <ImageIcon className="h-4 w-4 text-cyan-600" /> Task 1 (có đề bài + ảnh minh họa)
@@ -593,7 +591,7 @@ export default function TeacherDashboard() {
                         <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:bg-slate-100 bg-white border-slate-300">
                           <div className="flex flex-col items-center justify-center pt-5 pb-6 text-slate-500">
                             {isUploading ? <Clock className="w-6 h-6 animate-spin" /> : <UploadCloud className="w-6 h-6 mb-2" />}
-                            <p className="text-xs font-semibold">{isUploading ? "Đang tải ảnh..." : "Click để tải ảnh lên (PNG, JPG)"}</p>
+                            <p className="text-xs font-semibold">{isUploading ? "Đang tải ảnh..." : "Click để tải ảnh lên"}</p>
                           </div>
                           <input type="file" className="hidden" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={isUploading} />
                         </label>
@@ -601,7 +599,6 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
 
-                  {/* Task 2: prompt only, no image */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                     <div className="flex items-center gap-2 font-bold text-slate-800">
                       <BookOpen className="h-4 w-4 text-cyan-600" /> Task 2 (chỉ có đề bài)
@@ -629,20 +626,29 @@ export default function TeacherDashboard() {
                     </button>
                   </div>
 
+                  {/* ĐÃ FIX: Phần code cuối bị cắt cụt đã được hoàn thiện */}
                   {editingTest.id && (
                     <button
                       type="button"
                       onClick={() => copyTestLink(editingTest.id!)}
                       className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
                     >
-                      {copiedId === editingTest.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      {copiedId === editingTest.id ? "Đã sao chép đường link!" : "Sao chép link gửi học sinh"}
+                      {copiedId === editingTest.id ? (
+                        <>
+                          <Check className="h-4 w-4" /> Đã copy link
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4" /> Copy link đề thi
+                        </>
+                      )}
                     </button>
                   )}
                 </form>
               ) : (
-                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed">
-                  <p className="text-sm text-slate-500">Chọn đề bài để sửa hoặc tạo mới</p>
+                <div className="flex flex-col items-center justify-center py-20 text-slate-500 text-center">
+                  <BookOpen className="h-12 w-12 text-slate-300 mb-4" />
+                  <p>Chọn một đề thi bên trái để chỉnh sửa<br />hoặc bấm "Tạo đề mới".</p>
                 </div>
               )}
             </div>
