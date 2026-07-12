@@ -1,6 +1,16 @@
 import Groq from "groq-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { GradingFeedback } from "@/lib/types";
+// Hàm lọc sạch nội dung bài làm (Loại bỏ các dòng metadata)
+function cleanEssayContent(content: string): string {
+  // Regex này sẽ tìm và xóa các dòng chứa:
+  // 1. === THÔNG TIN HỌC SINH ===
+  // 2. Họ và tên: ...
+  // 3. ID, Lớp, hoặc bất kỳ label thông tin cá nhân nào
+  return content
+    .replace(/^(=+\s*THÔNG TIN HỌC SINH\s*=+|Họ\s+và\s+tên:.*|Student Name:.*|ID:.*|Lớp:.*|Subject:.*)$/gim, "")
+    .trim();
+}
 
 const SYSTEM_PROMPT = `You are a strict and official IELTS Writing examiner with deep knowledge of the official IELTS Writing Band Descriptors (British Council, IDP, Cambridge - updated May 2023).
 
@@ -52,13 +62,15 @@ Respond ONLY with a valid JSON object, no markdown, no preamble, matching EXACTL
 async function gradeWithGroq(content: string, testPrompt: string): Promise<GradingFeedback> {
   // Khởi tạo Groq client
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+  const cleanedContent = cleanEssayContent(content);
   
   const completion = await groq.chat.completions.create({
     model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
     response_format: { type: "json_object" }, // Ép Groq trả về JSON chuẩn
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: `Prompt: ${testPrompt}\n\nEssay: ${content}` },
+      { role: "user", content: `Prompt: ${testPrompt}\n\nEssay: ${content}\n\nHere is the essay content:\n${cleanedContent}` },
     ],
   });
   
