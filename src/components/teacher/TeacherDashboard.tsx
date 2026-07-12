@@ -480,7 +480,7 @@ export default function TeacherDashboard() {
                     {selectedSubmission.warning_count > 0 && (
                       <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 p-4 text-sm font-semibold text-amber-900">
                         <div className="bg-amber-100 p-2 rounded-full text-amber-600"><ShieldAlert className="h-5 w-5" /></div>
-                        Học sinh đã vi phạm quy chế thoát trang {selectedSubmission.warning_count}/3 lần!
+                        Học sinh đã vi phạm quy chế thoát trang {selectedSubmission.warning_count}/5 lần!
                       </div>
                     )}
                   </div>

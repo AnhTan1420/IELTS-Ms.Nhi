@@ -176,7 +176,7 @@ export default function StudentTest({
           <h1 className="text-2xl font-bold text-slate-900 mb-2">{title}</h1>
           <p className="text-slate-500 mb-6 text-sm">
             Vui lòng điền thông tin của bạn. Bài thi sẽ chạy toàn màn hình, có giới hạn {durationMinutes} phút, và hệ
-            thống sẽ giám sát hành vi thoát toàn màn hình / chuyển tab (tối đa {3} lần vi phạm).
+            thống sẽ giám sát hành vi thoát toàn màn hình / chuyển tab (tối đa {5} lần vi phạm).
           </p>
 
           {error && (
