@@ -230,7 +230,7 @@ export default function StudentTest({
   // ==========================================
   // MÀN HÌNH 2: BỊ HỦY BÀI THI (GIAN LẬN)
   // ==========================================
-  if (step === "disqualified" || isLocked) {
+  if (step === "disqualified" || isLocked || warnings >= maxWarnings) {
     return (
       <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white text-center">
         <ShieldAlert className="w-20 h-20 text-red-500 mb-4" />

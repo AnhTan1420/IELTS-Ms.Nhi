@@ -54,8 +54,15 @@ export function useAntiCheat({
 
         if (!response.ok) {
           // Fallback: increment locally if API fails
-          setWarnings(prev => Math.min(prev + 1, MAX_WARNINGS));
-          onWarning?.(warnings + 1, reason);
+          setWarnings(prev => {
+            const newCount = Math.min(prev + 1, MAX_WARNINGS);
+            if (newCount >= MAX_WARNINGS) {
+              setIsLocked(true);
+              onDisqualified();
+            }
+            onWarning?.(newCount, reason);
+            return newCount;
+          });
           return;
         }
 
