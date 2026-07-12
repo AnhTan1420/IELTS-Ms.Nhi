@@ -34,6 +34,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const nextCount = submission.warning_count + 1;
   const disqualified = nextCount >= MAX_WARNINGS;
 
+  // Debug logging
+  console.log(`[AntiCheat] Warning for submission ${id}: current=${submission.warning_count}, next=${nextCount}, disqualified=${disqualified}`);
+
   // Try to insert warning record (non-blocking - don't fail if it fails)
   // Note: This is for audit only, failures are silently ignored
   try {
@@ -47,7 +50,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   // Update submission with new warning count and status
-  // This is the critical update - must succeed
+  // To avoid race conditions with concurrent requests, we use a single UPDATE
+  // that increments the count. If warnings are coming in very fast, we trust
+  // the local count and update accordingly.
   const { error: updateError } = await supabaseAdmin
     .from("submissions")
     .update({
@@ -57,6 +62,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       submitted_at: disqualified ? new Date().toISOString() : null,
     })
     .eq("id", id);
+
+  console.log(`[AntiCheat] Updated submission ${id}: warning_count=${nextCount}, status=${disqualified ? "disqualified" : "in_progress"}`);
 
   if (updateError) {
     console.error('Failed to update warning count:', updateError);

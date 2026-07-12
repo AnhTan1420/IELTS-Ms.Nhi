@@ -24,7 +24,7 @@ export function useAntiCheat({
   const [warnings, setWarnings] = useState(initialWarnings);
   const [isLocked, setIsLocked] = useState(false);
   const lastViolationTimeRef = useRef(0);
-  const isProcessingViolationRef = useRef(false);
+  const localWarningCountRef = useRef(initialWarnings);
   const reportViolationRef = useRef<((reason: AntiCheatReason) => Promise<void>) | null>(null);
 
   const bypassBlurRef = useRef(false);
@@ -40,23 +40,18 @@ export function useAntiCheat({
     async (reason: AntiCheatReason) => {
       if (!enabled || !submissionId || isLocked) return;
 
-      // Prevent re-entry: if already processing a violation, ignore new ones
-      if (isProcessingViolationRef.current) return;
-      isProcessingViolationRef.current = true;
-
       // Store the latest function in ref for event handlers
       reportViolationRef.current = reportViolation;
 
-      // Debounce: wait 100ms to group blur + visibilitychange events (fire ~50ms apart)
+      // Debounce: 50ms to group blur + visibilitychange events (fire ~10-20ms apart)
       const now = Date.now();
-      if (now - lastViolationTimeRef.current < 100) {
-        isProcessingViolationRef.current = false;
+      if (now - lastViolationTimeRef.current < 50) {
         return;
       }
       lastViolationTimeRef.current = now;
 
-      // Immediately increment local warning count
-      const newLocalCount = warnings + 1;
+      // Increment local warning count (using ref to avoid stale closure)
+      const newLocalCount = ++localWarningCountRef.current;
       setWarnings(newLocalCount);
       onWarning?.(newLocalCount, reason);
 
@@ -89,10 +84,11 @@ export function useAntiCheat({
           setIsLocked(true);
           onDisqualified();
         }
-      } finally {
-        isProcessingViolationRef.current = false;
+      } catch (error) {
+        console.error("Failed to report violation", error);
       }
     },
+
     [enabled, isLocked, onDisqualified, onWarning, submissionId, warnings],
   );
 
