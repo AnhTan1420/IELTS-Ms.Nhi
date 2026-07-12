@@ -5,10 +5,16 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 // dashboard show the essay "live" before it's submitted.
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { content } = (await request.json()) as { content?: string };
+  const { content, end_reason, status } = (await request.json()) as {
+    content?: string;
+    end_reason?: string;
+    status?: string;
+  };
 
-  if (typeof content !== "string") {
-    return NextResponse.json({ error: "Missing content" }, { status: 400 });
+  const hasContent = typeof content === "string";
+
+  if (!hasContent && !end_reason && !status) {
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
   const supabaseAdmin = getSupabaseAdmin();
@@ -23,12 +29,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Submission not found" }, { status: 404 });
   }
 
-  if (submission.status !== "in_progress") {
+  if (submission.status !== "in_progress" && !status) {
     // Test already finished — silently ignore late autosave pings.
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  const { error } = await supabaseAdmin.from("submissions").update({ content }).eq("id", id);
+  const updateData: { content?: string; end_reason?: string; status?: string; submitted_at?: string } =
+    {};
+
+  if (hasContent) {
+    updateData.content = content;
+  }
+  if (end_reason) {
+    updateData.end_reason = end_reason;
+  }
+  if (status) {
+    updateData.status = status;
+    // Set submitted_at when status changes to disqualified or submitted
+    if (status === "disqualified" || status === "submitted") {
+      updateData.submitted_at = new Date().toISOString();
+    }
+  }
+
+  const { error } = await supabaseAdmin.from("submissions").update(updateData).eq("id", id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

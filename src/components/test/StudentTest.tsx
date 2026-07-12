@@ -96,6 +96,20 @@ export default function StudentTest({
     },
     onDisqualified: () => {
       setStep("disqualified");
+      // Auto-save answers when disqualified
+      if (submissionId) {
+        const { task1Answer: t1, task2Answer: t2 } = answersRef.current;
+        const combinedContent = buildCombinedContent(t1, t2);
+        void fetch(`/api/submissions/${submissionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: combinedContent,
+            end_reason: "disqualified",
+            status: "disqualified"
+          }),
+        }).catch(() => {});
+      }
     },
   });
 
@@ -222,8 +236,9 @@ export default function StudentTest({
         <ShieldAlert className="w-20 h-20 text-red-500 mb-4" />
         <h1 className="text-3xl font-bold text-red-500 mb-2">BÀI THI BỊ HỦY</h1>
         <p className="text-slate-400 max-w-md">
-          Bạn đã vi phạm quy chế thi (thoát toàn màn hình hoặc chuyển tab) quá {maxWarnings} lần cho phép. Bài làm của
-          bạn đã bị khóa và đánh dấu gian lận.
+          Bạn đã vi phạm quy chế thi (thoát toàn màn hình hoặc chuyển tab) {warnings} lần.
+          {warnings >= maxWarnings && ` Giới hạn tối đa là ${maxWarnings} lần.`}
+          Bài làm của bạn đã bị khóa và đánh dấu gian lận.
         </p>
       </main>
     );
@@ -254,10 +269,19 @@ export default function StudentTest({
     <main className="min-h-screen bg-slate-50 p-6 text-slate-950">
       <div className="mx-auto max-w-5xl">
         {warnings > 0 && (
-          <div className="mb-6 flex items-center justify-between bg-red-100 border border-red-300 text-red-800 px-6 py-4 rounded-2xl shadow-sm animate-pulse">
+          <div className={`mb-6 flex items-center justify-between px-6 py-4 rounded-2xl shadow-sm animate-pulse ${
+            warnings >= maxWarnings
+              ? "bg-red-200 border border-red-400 text-red-900"
+              : "bg-red-100 border border-red-300 text-red-800"
+          }`}>
             <div className="flex items-center gap-3 font-semibold">
               <ShieldAlert className="w-6 h-6 text-red-600" />
-              <span>Cảnh báo vi phạm quy chế thi: Bạn đã thoát toàn màn hình hoặc chuyển tab.</span>
+              <span>
+                {warnings >= maxWarnings
+                  ? "Bạn đã vi phạm quá số lần cho phép! Bài thi bị hủy."
+                  : `Cảnh báo vi phạm quy chế thi: Bạn đã thoát toàn màn hình hoặc chuyển tab. ${warnings >= maxWarnings - 1 ? "Lần tiếp theo bài thi sẽ bị hủy!" : ""}`
+                }
+              </span>
             </div>
             <span className="font-bold text-lg bg-red-200 px-3 py-1 rounded-lg">
               {warnings} / {maxWarnings}
