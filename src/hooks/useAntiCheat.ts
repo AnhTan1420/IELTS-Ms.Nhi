@@ -25,6 +25,9 @@ export function useAntiCheat({
   const [isLocked, setIsLocked] = useState(false);
   const reportingRef = useRef(false);
   const lastReasonAtRef = useRef(0);
+  
+  // Ref dùng để bỏ qua kiểm tra blur khi người dùng copy/paste hoặc click chuột phải
+  const bypassBlurRef = useRef(false);
 
   const enterFullscreen = useCallback(async () => {
     if (!document.fullscreenElement) {
@@ -80,10 +83,25 @@ export function useAntiCheat({
       }
     };
 
+    // Kích hoạt chế độ bỏ qua phạt blur trong thời gian ngắn (300ms)
+    const triggerBypass = () => {
+      bypassBlurRef.current = true;
+      setTimeout(() => {
+        bypassBlurRef.current = false;
+      }, 300);
+    };
+
     const handleBlur = () => {
-      if (document.visibilityState === "visible") {
-        void reportViolation("window_blur");
-      }
+      // Đặt một timeout nhỏ để đảm bảo trạng thái bypassBlurRef được cập nhật chính xác
+      setTimeout(() => {
+        if (document.visibilityState === "visible" && !bypassBlurRef.current) {
+          void reportViolation("window_blur");
+        }
+      }, 50);
+    };
+
+    const handleFocus = () => {
+      bypassBlurRef.current = false;
     };
 
     const handleFullscreenChange = () => {
@@ -92,14 +110,26 @@ export function useAntiCheat({
       }
     };
 
+    // Các sự kiện chính
     document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+
+    // Lắng nghe các sự kiện copy, paste và chuột phải để bật bypass
+    window.addEventListener("contextmenu", triggerBypass);
+    window.addEventListener("copy", triggerBypass);
+    window.addEventListener("paste", triggerBypass);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+      
+      window.removeEventListener("contextmenu", triggerBypass);
+      window.removeEventListener("copy", triggerBypass);
+      window.removeEventListener("paste", triggerBypass);
     };
   }, [enabled, reportViolation]);
 
