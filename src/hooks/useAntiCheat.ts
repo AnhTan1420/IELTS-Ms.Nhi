@@ -23,8 +23,6 @@ export function useAntiCheat({
 }: UseAntiCheatOptions) {
   const [warnings, setWarnings] = useState(initialWarnings);
   const [isLocked, setIsLocked] = useState(false);
-  const reportingRef = useRef(false);
-  const lastReasonAtRef = useRef(0);
   const lastViolationTimeRef = useRef(0);
   const isProcessingViolationRef = useRef(false);
   const reportViolationRef = useRef<((reason: AntiCheatReason) => Promise<void>) | null>(null);
@@ -49,9 +47,9 @@ export function useAntiCheat({
       // Store the latest function in ref for event handlers
       reportViolationRef.current = reportViolation;
 
-      // Debounce: wait 800ms to group rapid events (tab switch fires blur + visibilitychange)
+      // Debounce: wait 200ms to group rapid events (tab switch fires blur + visibilitychange)
       const now = Date.now();
-      if (now - lastViolationTimeRef.current < 800) {
+      if (now - lastViolationTimeRef.current < 200) {
         isProcessingViolationRef.current = false;
         return;
       }
@@ -68,9 +66,8 @@ export function useAntiCheat({
         onDisqualified();
       }
 
-      // Send to backend (no rate limit to ensure all warnings are saved)
-      if (reportingRef.current) return;
-      reportingRef.current = true;
+      // Send to backend - allow all warnings to be saved
+      // Note: Backend handles warning_count atomically, so overlapping calls are safe
 
       try {
         const response = await fetch(`/api/submissions/${submissionId}/warning`, {
@@ -102,7 +99,6 @@ export function useAntiCheat({
           onDisqualified();
         }
       } finally {
-        reportingRef.current = false;
         isProcessingViolationRef.current = false;
       }
     },
