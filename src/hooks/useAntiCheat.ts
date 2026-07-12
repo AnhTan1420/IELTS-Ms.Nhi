@@ -29,6 +29,7 @@ export function useAntiCheat({
 
   const bypassBlurRef = useRef(false);
   const bypassTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTabSwitchingRef = useRef(false);
 
   const enterFullscreen = useCallback(async () => {
     if (!document.fullscreenElement) {
@@ -43,9 +44,10 @@ export function useAntiCheat({
       // Store the latest function in ref for event handlers
       reportViolationRef.current = reportViolation;
 
-      // Debounce: 50ms to group blur + visibilitychange events (fire ~10-20ms apart)
+      // Debounce: 1000ms (1 second) to prevent rapid warnings from the same action
+      // Also prevent duplicate warnings for the same reason within the debounce period
       const now = Date.now();
-      if (now - lastViolationTimeRef.current < 200) {
+      if (now - lastViolationTimeRef.current < 1000) {
         return;
       }
       lastViolationTimeRef.current = now;
@@ -97,29 +99,36 @@ export function useAntiCheat({
     reportViolationRef.current = reportViolation;
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") void reportViolationRef.current?.("tab_hidden");
+      if (document.visibilityState === "hidden") {
+        isTabSwitchingRef.current = true;
+        void reportViolationRef.current?.("tab_hidden");
+      } else {
+        isTabSwitchingRef.current = false;
+      }
     };
 
-    // Hàm bỏ qua cảnh cáo tạm thời (Bypass)
+    // Hàm bỏ qua cảnh báo tạm thời (Bypass)
     const triggerBypass = () => {
       bypassBlurRef.current = true;
       if (bypassTimeoutRef.current) clearTimeout(bypassTimeoutRef.current);
       // Cho người dùng 1.5 giây an toàn để thực hiện copy/paste mà không bị cảnh cáo
       bypassTimeoutRef.current = setTimeout(() => {
         bypassBlurRef.current = false;
-      }, 1500); 
+      }, 1500);
     };
 
     const handleBlur = () => {
       setTimeout(() => {
-        if (document.visibilityState === "visible" && !bypassBlurRef.current) {
+        // Only trigger if not already handling a tab switch
+        if (document.visibilityState === "visible" && !bypassBlurRef.current && !isTabSwitchingRef.current) {
           void reportViolationRef.current?.("window_blur");
         }
-      }, 100);
+      }, 300);
     };
 
     const handleFocus = () => {
       bypassBlurRef.current = false;
+      isTabSwitchingRef.current = false;
     };
 
     const handleFullscreenChange = () => {
