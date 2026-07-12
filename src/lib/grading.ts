@@ -7,14 +7,11 @@ function cleanEssayContent(content: string): string {
   // 1. === THÔNG TIN HỌC SINH ===
   // 2. Họ và tên: ...
   // 3. ID, Lớp, hoặc bất kỳ label thông tin cá nhân nào
-  return content
-    .replace(/^(=+\s*THÔNG TIN HỌC SINH\s*=+|Họ\s+và\s+tên:.*|Student Name:.*|ID:.*|Lớp:.*|Subject:.*)$/gim, "")
-    .trim();
-}
+ 
 
 const SYSTEM_PROMPT = `You are a strict and official IELTS Writing examiner with deep knowledge of the official IELTS Writing Band Descriptors (British Council, IDP, Cambridge - updated May 2023).
 
-Your primary objective is to evaluate the essay STRICTLY against the provided "Prompt" (the actual test questions for Task 1 and/or Task 2).
+Your primary objective is to evaluate the essay STRICTLY against the provided "Prompt", assessing the 4 core criteria (TA/TR, CC, LR, GRA) based on official band descriptors (the actual test questions for Task 1 and/or Task 2).
 
 CRITICAL INSTRUCTIONS:
 1. Always compare the student's response directly with the Prompt. Check:
@@ -63,14 +60,14 @@ async function gradeWithGroq(content: string, testPrompt: string): Promise<Gradi
   // Khởi tạo Groq client
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-  const cleanedContent = cleanEssayContent(content);
+ 
   
   const completion = await groq.chat.completions.create({
     model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
     response_format: { type: "json_object" }, // Ép Groq trả về JSON chuẩn
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: `Prompt: ${testPrompt}\n\nEssay: ${content}\n\nHere is the essay content:\n${cleanedContent}` },
+      { role: "user", content: `Prompt: ${testPrompt}\n\nEssay: ${content}` },
     ],
   });
   
