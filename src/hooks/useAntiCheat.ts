@@ -37,8 +37,21 @@ export function useAntiCheat({
 
   const reportViolation = useCallback(
     async (reason: AntiCheatReason) => {
-      if (!enabled || !submissionId || isLocked || reportingRef.current) return;
+      if (!enabled || !submissionId || isLocked) return;
 
+      // Immediately increment local warning count (no rate limit for UI)
+      setWarnings(prev => {
+        const newCount = prev + 1;
+        // Check if reached limit locally
+        if (newCount >= MAX_WARNINGS) {
+          setIsLocked(true);
+          onDisqualified();
+        }
+        onWarning?.(newCount, reason);
+        return newCount;
+      });
+
+      // Rate limit API calls to prevent spam (max 1 per 500ms)
       const now = Date.now();
       if (now - lastReasonAtRef.current < 500) return;
 
@@ -53,25 +66,23 @@ export function useAntiCheat({
         });
 
         if (!response.ok) {
-          // Fallback: increment locally if API fails
-          setWarnings(prev => {
-            const newCount = Math.min(prev + 1, MAX_WARNINGS);
-            if (newCount >= MAX_WARNINGS) {
-              setIsLocked(true);
-              onDisqualified();
-            }
-            onWarning?.(newCount, reason);
-            return newCount;
-          });
+          // API failed but UI already updated locally
           return;
         }
 
         const data = (await response.json()) as { warningCount: number; status: string };
 
-        setWarnings(data.warningCount);
-        onWarning?.(data.warningCount, reason);
+        // Sync with backend count if different
+        if (data.warningCount !== warnings + 1) {
+          setWarnings(data.warningCount);
+          if (data.warningCount >= MAX_WARNINGS) {
+            setIsLocked(true);
+            onDisqualified();
+          }
+        }
 
-        if (data.status === "disqualified" || data.warningCount >= MAX_WARNINGS) {
+        // If backend says disqualified, ensure UI reflects it
+        if (data.status === "disqualified") {
           setIsLocked(true);
           onDisqualified();
         }
@@ -79,7 +90,7 @@ export function useAntiCheat({
         reportingRef.current = false;
       }
     },
-    [enabled, isLocked, onDisqualified, onWarning, submissionId],
+    [enabled, isLocked, onDisqualified, onWarning, submissionId, warnings],
   );
 
   useEffect(() => {

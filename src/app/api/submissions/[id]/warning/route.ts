@@ -31,17 +31,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
   }
 
-  const nextCount = Math.min(submission.warning_count + 1, MAX_WARNINGS);
+  const nextCount = submission.warning_count + 1;
   const disqualified = nextCount >= MAX_WARNINGS;
 
-  const { error: warningError } = await supabaseAdmin.from("warnings").insert({
-    submission_id: id,
-    reason,
-    warning_number: nextCount,
-  });
-
-  if (warningError) {
-    return NextResponse.json({ error: warningError.message }, { status: 500 });
+  // Try to insert warning record (non-blocking - don't fail if it fails)
+  try {
+    await supabaseAdmin.from("warnings").insert({
+      submission_id: id,
+      reason,
+      warning_number: nextCount,
+    });
+  } catch {
+    // ignore insert failures
   }
 
   const { error: updateError } = await supabaseAdmin
@@ -58,6 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
+  // Always return the updated count - frontend needs this to show correct warning count
   return NextResponse.json({
     warningCount: nextCount,
     status: disqualified ? "disqualified" : "in_progress",
