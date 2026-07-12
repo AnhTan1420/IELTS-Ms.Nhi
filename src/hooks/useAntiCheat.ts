@@ -40,7 +40,7 @@ export function useAntiCheat({
       if (!enabled || !submissionId || isLocked || reportingRef.current) return;
 
       const now = Date.now();
-      if (now - lastReasonAtRef.current < 1200) return;
+      if (now - lastReasonAtRef.current < 500) return;
 
       reportingRef.current = true;
       lastReasonAtRef.current = now;
@@ -52,7 +52,12 @@ export function useAntiCheat({
           body: JSON.stringify({ reason }),
         });
 
-        if (!response.ok) return;
+        if (!response.ok) {
+          // Fallback: increment locally if API fails
+          setWarnings(prev => Math.min(prev + 1, MAX_WARNINGS));
+          onWarning?.(warnings + 1, reason);
+          return;
+        }
 
         const data = (await response.json()) as { warningCount: number; status: string };
 
