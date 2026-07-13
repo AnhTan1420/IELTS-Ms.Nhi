@@ -78,6 +78,12 @@ Task 2
 
 CRITICAL SCORING RULES
 
+Task Achievement (Task 1) or Task Response (Task 2) is the most important criterion.
+
+Do NOT award a high Overall Band Score if Task Achievement/Response is weak, even when vocabulary or grammar is strong.
+
+Always follow the official IELTS Writing Band Descriptors when calculating the Overall Band.
+
 - TA/TR MUST be an integer between 0 and 9.
 - CC MUST be an integer between 0 and 9.
 - LR MUST be an integer between 0 and 9.
@@ -185,16 +191,16 @@ Use EXACTLY this schema:
   "overall_band": number,
   "examiner_summary": string,
   "task1": {
-    "TA": number,
-    "CC": number,
-    "LR": number,
-    "GRA": number
+    "TA": integer,
+    "CC": integer,
+    "LR": integer,
+    "GRA": integer
   } | null,
   "task2": {
-    "TR": number,
-    "CC": number,
-    "LR": number,
-    "GRA": number
+    "TR": integer,
+    "CC": integer,
+    "LR": integer,
+    "GRA": integer
   } | null,
   "corrections": [
     {
@@ -205,24 +211,81 @@ Use EXACTLY this schema:
   ]
 }
 `;
+function parseAIJson(text: string): GradingFeedback {
+  const cleaned = text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
 
-async function gradeWithGroq(content: string, testPrompt: string): Promise<GradingFeedback> {
-  // Khởi tạo Groq client
-  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  if (start === -1 || end === -1) {
+    throw new Error("AI did not return valid JSON.");
+  }
 
- 
-  
+  const result = JSON.parse(cleaned.substring(start, end + 1));
+
+  if (
+    typeof result.overall_band !== "number" ||
+    !Array.isArray(result.corrections)
+  ) {
+    throw new Error("Invalid grading response schema.");
+  }
+
+  return result;
+}
+
+function buildUserPrompt(testPrompt: string, essay: string) {
+  return `
+IELTS Writing Evaluation
+
+Question:
+${testPrompt}
+
+Student Essay:
+${essay}
+
+Instructions:
+
+- Evaluate this essay STRICTLY according to the official IELTS Writing Band Descriptors.
+- Compare the essay directly with the question.
+- Return ONLY valid JSON.
+- Do NOT include markdown.
+- Do NOT include explanations outside the JSON.
+`;
+}
+
+async function gradeWithGroq(
+  content: string,
+  testPrompt: string
+): Promise<GradingFeedback> {
+  const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+  });
+
   const completion = await groq.chat.completions.create({
-    model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
-    response_format: { type: "json_object" }, // Ép Groq trả về JSON chuẩn
+    model: process.env.GROQ_MODEL ?? "meta-llama/llama-4-maverick-17b-128e-instruct",
+    response_format: {
+      type: "json_object",
+    },
+    temperature: 0,
+    max_completion_tokens: 2500,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: `Prompt: ${testPrompt}\n\nEssay: ${content}` },
+      {
+        role: "system",
+        content: SYSTEM_PROMPT,
+      },
+      {
+        role: "user",
+        content: buildUserPrompt(testPrompt, content),
+      },
     ],
   });
-  
-  return JSON.parse(completion.choices[0]?.message?.content || "{}");
+
+  const text = completion.choices[0]?.message?.content ?? "";
+
+  return parseAIJson(text);
 }
 
 async function gradeWithGemini(content: string, testPrompt: string): Promise<GradingFeedback> {
