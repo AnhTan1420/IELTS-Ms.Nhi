@@ -113,32 +113,6 @@ CRITICAL SCORING RULES
 
 Task Achievement (Task 1) or Task Response (Task 2) is the most important criterion.
 
-If Task Achievement (Task 1) or Task Response (Task 2) is Band 5 or below,
-Overall Band Score normally cannot exceed Band 6.0 unless there is exceptional evidence.
-
-Task Achievement / Task Response should have the greatest influence on the Overall Band Score.
-
-Never reward memorized vocabulary.
-
-Never reward uncommon vocabulary unless it is accurate and natural.
-
-Natural English is always preferred over unnecessarily advanced vocabulary.
-
-Ignore very minor mistakes that do not affect communication.
-
-Penalize only systematic grammatical weaknesses.
-
-If the essay misses one or more major task requirements,
-Task Achievement / Task Response MUST NOT exceed Band 6.
-
-Do NOT score by counting mistakes.
-
-Score by matching the positive features of the official IELTS descriptors.
-
-The presence of some mistakes does not automatically reduce the band.
-
-Always consider overall communicative effectiveness.
-
 Do NOT award a high Overall Band Score if Task Achievement/Response is weak, even when vocabulary or grammar is strong.
 
 Always follow the official IELTS Writing Band Descriptors when calculating the Overall Band.
@@ -186,9 +160,6 @@ Use this analysis when determining TA/TR.
 
 Do NOT output this analysis.
 
-If the essay misses one or more major task requirements,
-Task Achievement / Task Response MUST NOT exceed Band 6.
-
 ========================
 CORRECTIONS
 ========================
@@ -205,21 +176,13 @@ Preserve the student's original voice.
 
 Return ONLY meaningful corrections.
 
-Only include corrections that improve the IELTS score.
-
-Do not correct stylistic preferences.
-
-Maximum 15 corrections.
-
 ========================
 EXAMINER SUMMARY
 ========================
 
 examiner_summary MUST be written in ENGLISH.
 
-Length: Explain exactly why the essay received its Task Achievement / Task Response score with reference to the prompt.
-
-Avoid generic feedback.
+Length: 3-5 sentences.
 
 Include:
 
@@ -281,6 +244,50 @@ Use EXACTLY this schema:
   ]
 }
 `;
+function parseAIJson(text: string): GradingFeedback {
+  const cleaned = text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+
+  if (start === -1 || end === -1) {
+    throw new Error("AI did not return valid JSON.");
+  }
+
+  const result = JSON.parse(cleaned.substring(start, end + 1));
+
+  if (
+    typeof result.overall_band !== "number" ||
+    !Array.isArray(result.corrections)
+  ) {
+    throw new Error("Invalid grading response schema.");
+  }
+
+  return result;
+}
+
+function buildUserPrompt(testPrompt: string, essay: string) {
+  return `
+IELTS Writing Evaluation
+
+Question:
+${testPrompt}
+
+Student Essay:
+${essay}
+
+Instructions:
+
+- Evaluate this essay STRICTLY according to the official IELTS Writing Band Descriptors.
+- Compare the essay directly with the question.
+- Return ONLY valid JSON.
+- Do NOT include markdown.
+- Do NOT include explanations outside the JSON.
+`;
+}
 
 async function gradeWithGroq(content: string, testPrompt: string): Promise<GradingFeedback> {
   // Khởi tạo Groq client
