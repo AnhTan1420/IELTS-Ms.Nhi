@@ -126,24 +126,6 @@ DO NOT assign 6.5, 7.5 or any decimal score to individual criteria.
 
 Overall Band Score MUST be calculated from the average of the four criterion scores and rounded according to the official IELTS overall band rounding rules.
 
-Examples:
-
-TA = 7
-CC = 7
-LR = 6
-GRA = 7
-
-Average = 6.75
-Overall = 7.0
-
-TA = 6
-CC = 6
-LR = 7
-GRA = 7
-
-Average = 6.50
-Overall = 6.5
-
 ========================
 ASSESSMENT
 ========================
