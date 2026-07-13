@@ -80,6 +80,29 @@ Task 2
 
 Always explain WHY each criterion received its score.
 
+CRITICAL SCORING RULES
+
+- Task Achievement (TA), Task Response (TR), Coherence & Cohesion (CC), Lexical Resource (LR), and Grammatical Range & Accuracy (GRA) MUST be WHOLE INTEGERS ONLY.
+
+Allowed values:
+
+0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+
+Never output:
+0.5
+1.5
+2.5
+3.5
+4.5
+5.5
+6.5
+7.5
+8.5
+
+Only "overall_band" may contain .5 according to the official IELTS overall band calculation.
+
+If you are uncertain between two bands for a criterion, choose the LOWER whole band.
+
 ========================
 PROMPT ANALYSIS
 ========================
