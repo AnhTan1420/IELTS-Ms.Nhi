@@ -256,36 +256,22 @@ Instructions:
 `;
 }
 
-async function gradeWithGroq(
-  content: string,
-  testPrompt: string
-): Promise<GradingFeedback> {
-  const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY,
-  });
+async function gradeWithGroq(content: string, testPrompt: string): Promise<GradingFeedback> {
+  // Khởi tạo Groq client
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+ 
+  
   const completion = await groq.chat.completions.create({
-    model: process.env.GROQ_MODEL ?? "meta-llama/llama-4-maverick-17b-128e-instruct",
-    response_format: {
-      type: "json_object",
-    },
-    temperature: 0,
-    max_completion_tokens: 2500,
+    model: process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
+    response_format: { type: "json_object" }, // Ép Groq trả về JSON chuẩn
     messages: [
-      {
-        role: "system",
-        content: SYSTEM_PROMPT,
-      },
-      {
-        role: "user",
-        content: buildUserPrompt(testPrompt, content),
-      },
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: `Prompt: ${testPrompt}\n\nEssay: ${content}` },
     ],
   });
-
-  const text = completion.choices[0]?.message?.content ?? "";
-
-  return parseAIJson(text);
+  
+  return JSON.parse(completion.choices[0]?.message?.content || "{}");
 }
 
 async function gradeWithGemini(content: string, testPrompt: string): Promise<GradingFeedback> {
