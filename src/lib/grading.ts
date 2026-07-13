@@ -163,17 +163,17 @@ Use EXACTLY this schema:
   "examiner_summary": string,
   "task1": {
     "band": number,
-    "TA": number,
-    "CC": number,
-    "LR": number,
-    "GRA": number
+    "TA": integer,
+    "CC": integer,
+    "LR": integer,
+    "GRA": integer
   } | null,
   "task2": {
     "band": number,
-    "TR": number,
-    "CC": number,
-    "LR": number,
-    "GRA": number
+    "TR": integer,
+    "CC": integer,
+    "LR": integer,
+    "GRA": integer
   } | null,
   "corrections": [
     {
