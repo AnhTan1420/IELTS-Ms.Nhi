@@ -261,7 +261,7 @@ async function gradeWithGemini(content: string, testPrompt: string): Promise<Gra
 export async function gradeSubmission(content: string, testPrompt: string): Promise<GradingFeedback> {
   const cleanedContent = cleanEssayContent(content);
   try {
-    return await gradeWithGroq(content, testPrompt);
+    return await gradeWithGroq(cleanedContent, testPrompt);
   } catch (groqError) {
     console.warn("Groq grading failed, falling back to Gemini:", groqError);
     return await gradeWithGemini(cleanedContent, testPrompt);
