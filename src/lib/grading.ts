@@ -1,124 +1,45 @@
 import Groq from "groq-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { GradingFeedback } from "@/lib/types";
+// Hàm lọc sạch nội dung bài làm (Loại bỏ các dòng metadata)
 
-// ─────────────────────────────────────────────────────────────
-// Unified prompt builder — one function for Task 1 & Task 2
-// Replaces TASK1_SYSTEM_PROMPT + TASK2_SYSTEM_PROMPT constants
-// ─────────────────────────────────────────────────────────────
 
-type TaskType = "task1" | "task2";
+const SYSTEM_PROMPT = `You are a strict and official IELTS Writing examiner with deep knowledge of the official IELTS Writing Band Descriptors (British Council, IDP, Cambridge - updated May 2023).
 
-const TASK_CONFIG = {
-  task1: {
-    label:           "Task 1 (Academic / General Training)",
-    primaryFocus:    "Task Achievement (TA) and Coherence & Cohesion (CC)",
-    criterionLabel:  "Task Achievement",
-    promptAnalysis: `## PROMPT ANALYSIS (Task Achievement Pre-check)
-Briefly analyse the chart / graph / map / letter prompt.
-- Main trend or purpose that MUST appear in the overview
-- Key features that MUST be highlighted and compared
-- Specific data points or bullet points that cannot be missed`,
-    currentBandNote:
-      "Did the essay present a clear overview? Were key features selected and compared — not every data point listed?",
-  },
-  task2: {
-    label:           "Task 2 (Academic / General Training)",
-    primaryFocus:    "Task Response (TR) and Coherence & Cohesion (CC)",
-    criterionLabel:  "Task Response",
-    promptAnalysis: `## PROMPT ANALYSIS (Task Response Pre-check)
-Briefly unpack the provided question.
-- Core topic
-- ALL parts of the question that MUST be addressed (both views / causes & solutions / etc.)
-- What position or opinion is required`,
-    currentBandNote:
-      "Did the essay address ALL parts of the question? Is the position clear and consistently maintained? Were ideas extended with examples and analysis — not just asserted?",
-  },
-} as const;
+Your primary objective is to evaluate the essay STRICTLY against the provided "Prompt", assessing the 4 core criteria (TA/TR, CC, LR, GRA) based on official band descriptors (the actual test questions for Task 1 and/or Task 2).
 
-function buildSystemPrompt(taskType: TaskType): string {
-  const t = TASK_CONFIG[taskType];
+CRITICAL INSTRUCTIONS:
+1. Always compare the student's response directly with the Prompt. Check:
+   - Task 1 (Academic): Did they select & highlight key features, present a clear overview, categorise data appropriately, illustrate trends/differences?MUST be written in VIETNAMESE
+   - Task 1 (GT): Did they cover ALL bullet points clearly and appropriately extend/illustrate them?MUST be written in VIETNAMESE
+   - Task 2: Did they address all parts of the prompt? Present a clear & well-developed position? Extend and support main ideas sufficiently?MUST be written in VIETNAMESE
 
-  return `Act as a strict and highly experienced IELTS Examiner with 15+ years of Cambridge Assessment English certification. Grade the IELTS Writing ${t.label} based strictly on the official public band descriptors (British Council / IDP / Cambridge, May 2023 revision).
+2. For each criterion (TA/TR, CC, LR, GRA), assign band scores (0-9 in 0.5 steps) by matching the response to the POSITIVE features of the official descriptors. Use bolded negative features (e.g. off-topic, underlength, no overview, repetitive, etc.) to limit the score.
 
-CORE INSTRUCTIONS:
-1. FOCUS HEAVILY on ${t.primaryFocus}.
-   ${t.currentBandNote}
-2. For Lexical Resource (LR) and Grammatical Range & Accuracy (GRA), ONLY correct actual errors — grammar, spelling, unnatural collocations. DO NOT rewrite the entire essay. Preserve the original voice.
-3. SCORING FORMAT — follow IELTS official rounding exactly:
-   - Component scores (TA/TR, CC, LR, GRA): whole integers only — 1, 2, 3 … 9. Never decimals.
-   - Task band & overall_band: rounded to nearest 0.5 — valid values: 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0 8.5 9.0
-     Formula: task band = mean of 4 components, rounded to nearest 0.5
-     Example: TA=6 CC=7 LR=7 GRA=7 → mean=6.75 → rounds to 7.0
-     Example: TA=6 CC=6 LR=7 GRA=7 → mean=6.5 → stays 6.5
-4. Justifications MUST quote specific phrases from the essay. Generic feedback is not acceptable.
-5. Only give a roadmap to Band 8.0 / 9.0 when current score is already 7.0+. Otherwise target the band immediately above.
-6. "explanation" fields in the corrections array MUST be written in VIETNAMESE.
-7. "examiner_summary" MUST be written in ENGLISH.
+3. In "examiner_summary" (3-5 sentences), you MUST:
+   - Explicitly analyze Task Achievement / Task Response in relation to the specific prompt (key features missed, off-topic, insufficient development, etc.).
+   - Comment on overall strengths and weaknesses across criteria.
+   - Give specific, actionable suggestions for improvement tied to the prompt. (MUST be written in ENGLISH)
 
-─────────────────────────────────────────
-REQUIRED RESPONSE STRUCTURE — use these EXACT section headers in this EXACT order
-─────────────────────────────────────────
+4. In the "corrections" array, the "explanation" field MUST be written in VIETNAMESE. Explain errors clearly, referencing the specific band descriptor (e.g., "Điều này ảnh hưởng đến điểm Task Achievement vì...").
 
-${t.promptAnalysis}
-
-## OVERALL & COMPONENT SCORES
-- Overall Band Score: X.X
-- ${t.criterionLabel}: X.X
-- Coherence & Cohesion: X.X
-- Lexical Resource: X.X
-- Grammatical Range & Accuracy: X.X
-
-## BAND PROGRESSION ANALYSIS
-
-### Current Band [X.X] — Why this score
-${t.currentBandNote}
-Cite specific phrases from the essay to justify the score.
-
-### Why not Band [X.X − 0.5]
-Name at least one concrete feature the essay demonstrated that earns the higher score.
-
-### Why not Band [X.X + 0.5]
-Name exactly what is missing or flawed — specific sentences, missing features, or recurring error patterns.
-
-### Next Band Roadmap [X.X + 0.5]
-2–3 SPECIFIC, ACTIONABLE steps referencing actual sentences or paragraphs from THIS essay.
-(Target Band 8.0+ only when current score is already 7.0+.)
-
-## LIGHTLY CORRECTED ESSAY
-Reproduce the full essay with minimal targeted corrections only.
-Use **bold** for every changed word or phrase. Do not rewrite for style.
-
-## SUGGESTED VOCABULARY & STRUCTURES
-| Original | Better Alternative | Why it's better |
-|----------|--------------------|-----------------|
-| ...      | ...                | ...             |
-
-Provide 1–2 advanced sentence structures tailored to this specific essay's topic.
-Show a concrete example sentence — not a generic template.
-
-─────────────────────────────────────────
-JSON OUTPUT — append after all sections above
-─────────────────────────────────────────
-After the structured markdown sections, output a single valid JSON object.
-No markdown fences. No preamble. Match EXACTLY this shape:
-
+Respond ONLY with a valid JSON object, no markdown, no preamble, matching EXACTLY this shape:
 {
-  "overall_band": number,        // half-band: 5.0 / 5.5 / 6.0 / 6.5 / 7.0 / 7.5 / 8.0 / 8.5 / 9.0
+  "overall_band": number,
   "examiner_summary": string,
   "task1": {
-    "band": number,              // half-band (mean of TA+CC+LR+GRA rounded to nearest 0.5)
-    "TA": number,                // integer 1–9
-    "CC": number,                // integer 1–9
-    "LR": number,                // integer 1–9
-    "GRA": number                // integer 1–9
+    "band": number,
+    "TA": number,
+    "CC": number,
+    "LR": number,
+    "GRA": number
   } | null,
   "task2": {
-    "band": number,              // half-band (mean of TR+CC+LR+GRA rounded to nearest 0.5)
-    "TR": number,                // integer 1–9
-    "CC": number,                // integer 1–9
-    "LR": number,                // integer 1–9
-    "GRA": number                // integer 1–9
+    "band": number,
+    "TR": number,
+    "CC": number,
+    "LR": number,
+    "GRA": number
   } | null,
   "corrections": [
     {
@@ -128,130 +49,47 @@ No markdown fences. No preamble. Match EXACTLY this shape:
     }
   ]
 }`;
-}
 
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
 
-/** Round x to nearest 0.5, clamped to [1, 9] — for task band & overall_band */
-function toHalfBand(x: number): number {
-  return Math.round(Math.min(Math.max(x, 1), 9) * 2) / 2;
-}
-
-/** Round x to nearest integer, clamped to [1, 9] — for component scores */
-function toInteger(x: number): number {
-  return Math.round(Math.min(Math.max(x, 1), 9));
-}
-
-/**
- * Sanitize AI output to enforce IELTS scoring rules:
- * - Component scores (TA/TR, CC, LR, GRA) → integer 1–9
- * - Task band & overall_band → half-band (nearest 0.5)
- */
-function sanitizeBands(raw: GradingFeedback): GradingFeedback {
-  if (raw.task1) {
-    raw.task1.TA  = toInteger(raw.task1.TA);
-    raw.task1.CC  = toInteger(raw.task1.CC);
-    raw.task1.LR  = toInteger(raw.task1.LR);
-    raw.task1.GRA = toInteger(raw.task1.GRA);
-    // Recalculate band from components if AI got it wrong
-    const mean = (raw.task1.TA + raw.task1.CC + raw.task1.LR + raw.task1.GRA) / 4;
-    raw.task1.band = toHalfBand(mean);
-  }
-  if (raw.task2) {
-    raw.task2.TR  = toInteger(raw.task2.TR);
-    raw.task2.CC  = toInteger(raw.task2.CC);
-    raw.task2.LR  = toInteger(raw.task2.LR);
-    raw.task2.GRA = toInteger(raw.task2.GRA);
-    const mean = (raw.task2.TR + raw.task2.CC + raw.task2.LR + raw.task2.GRA) / 4;
-    raw.task2.band = toHalfBand(mean);
-  }
-  // overall_band: T1 × 1/3 + T2 × 2/3 (or just the task that exists)
-  if (raw.task1 && raw.task2) {
-    raw.overall_band = toHalfBand((raw.task1.band + raw.task2.band * 2) / 3);
-  } else if (raw.task1) {
-    raw.overall_band = raw.task1.band;
-  } else if (raw.task2) {
-    raw.overall_band = raw.task2.band;
-  }
-  return raw;
-}
-
-/** Pull the JSON block out of a mixed markdown+JSON response */
-function extractJson(raw: string): GradingFeedback {
-  const start = raw.lastIndexOf("{");
-  const end   = raw.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("No JSON block found in AI response");
-  const parsed = JSON.parse(raw.slice(start, end + 1)) as GradingFeedback;
-  return sanitizeBands(parsed);
-}
-
-// ─────────────────────────────────────────────────────────────
-// Provider: Groq
-// ─────────────────────────────────────────────────────────────
-async function gradeWithGroq(
-  content: string,
-  testPrompt: string,
-  taskType: TaskType,
-): Promise<GradingFeedback> {
+async function gradeWithGroq(content: string, testPrompt: string): Promise<GradingFeedback> {
+  // Khởi tạo Groq client
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+ 
+  
   const completion = await groq.chat.completions.create({
-    model:       process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
-    temperature: 0.2,
-    // No response_format: json_object — response is markdown + JSON mixed
+    model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+    response_format: { type: "json_object" }, // Ép Groq trả về JSON chuẩn
     messages: [
-      { role: "system", content: buildSystemPrompt(taskType) },
-      { role: "user",   content: `Prompt:\n${testPrompt}\n\nEssay:\n${content}` },
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: `Prompt: ${testPrompt}\n\nEssay: ${content}` },
     ],
   });
-
-  const raw = completion.choices[0]?.message?.content ?? "";
-  return extractJson(raw);
+  
+  return JSON.parse(completion.choices[0]?.message?.content || "{}");
 }
 
-// ─────────────────────────────────────────────────────────────
-// Provider: Gemini (fallback)
-// ─────────────────────────────────────────────────────────────
-async function gradeWithGemini(
-  content: string,
-  testPrompt: string,
-  taskType: TaskType,
-): Promise<GradingFeedback> {
+async function gradeWithGemini(content: string, testPrompt: string): Promise<GradingFeedback> {
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
-  const model  = genAI.getGenerativeModel({
-    model:             "gemini-1.5-flash",
-    systemInstruction: buildSystemPrompt(taskType),
-    generationConfig:  { temperature: 0.2 },
-    // No responseMimeType: json — response is markdown + JSON mixed
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    systemInstruction: SYSTEM_PROMPT,
+    generationConfig: { responseMimeType: "application/json" },
   });
-
-  const result = await model.generateContent(
-    `Prompt:\n${testPrompt}\n\nEssay:\n${content}`,
-  );
-  return extractJson(result.response.text());
+  
+  const result = await model.generateContent(`Prompt: ${testPrompt}\n\nEssay: ${content}`);
+  return JSON.parse(result.response.text());
 }
-
-// ─────────────────────────────────────────────────────────────
-// Public API — Groq first, Gemini fallback
-// ─────────────────────────────────────────────────────────────
 
 /**
- * Grades an IELTS Writing submission.
- * @param content    - Student essay text
- * @param testPrompt - The IELTS writing question / chart description
- * @param taskType   - "task1" | "task2" — drives the scoring criteria and prompt sections
+ * Grades an essay, trying Groq first and falling back to Gemini.
+ * Throws if both providers fail.
  */
-export async function gradeSubmission(
-  content: string,
-  testPrompt: string,
-  taskType: TaskType = "task2",
-): Promise<GradingFeedback> {
+export async function gradeSubmission(content: string, testPrompt: string): Promise<GradingFeedback> {
   try {
-    return await gradeWithGroq(content, testPrompt, taskType);
+    return await gradeWithGroq(content, testPrompt);
   } catch (groqError) {
-    console.warn("[grader] Groq failed, falling back to Gemini:", groqError);
-    return await gradeWithGemini(content, testPrompt, taskType);
+    console.warn("Groq grading failed, falling back to Gemini:", groqError);
+    return await gradeWithGemini(content, testPrompt);
   }
 }
