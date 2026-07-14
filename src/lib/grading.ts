@@ -1,5 +1,5 @@
 import Groq from "groq-sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai"; // Thay đổi SDK mới ở đây
 import type { GradingFeedback } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -229,7 +229,6 @@ async function gradeWithGroq(
   const completion = await groq.chat.completions.create({
     model:       process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
     temperature: 0.2,
-    // No response_format: json_object — response is markdown + JSON mixed
     messages: [
       { role: "system", content: buildSystemPrompt(taskType) },
       { role: "user",   content: `Prompt:\n${testPrompt}\n\nEssay:\n${content}` },
@@ -241,25 +240,27 @@ async function gradeWithGroq(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Provider: Gemini (fallback)
+// Provider: Gemini (fallback) - ĐÃ UPDATE LÊN SDK @google/genai
 // ─────────────────────────────────────────────────────────────
 async function gradeWithGemini(
   content: string,
   testPrompt: string,
   taskType: TaskType,
 ): Promise<GradingFeedback> {
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
-  const model  = genAI.getGenerativeModel({
-    model:             "gemini-1.5-flash",
-    systemInstruction: buildSystemPrompt(taskType),
-    generationConfig:  { temperature: 0.2 },
-    // No responseMimeType: json — response is markdown + JSON mixed
+  // Khởi tạo client theo chuẩn SDK mới
+  const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY });
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: `Prompt:\n${testPrompt}\n\nEssay:\n${content}`,
+    config: {
+      systemInstruction: buildSystemPrompt(taskType),
+      temperature: 0.2,
+    },
   });
 
-  const result = await model.generateContent(
-    `Prompt:\n${testPrompt}\n\nEssay:\n${content}`,
-  );
-  return extractJson(result.response.text());
+  // response.text là getter dạng thuộc tính, không cần gọi hàm ()
+  return extractJson(response.text || "");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -278,9 +279,11 @@ export async function gradeSubmission(
   taskType: TaskType = "task2",
 ): Promise<GradingFeedback> {
   try {
-    return await gradeWithGroq(content, testPrompt, taskType);
-  } catch (groqError) {
-    console.warn("[grader] Groq failed, falling back to Gemini:", groqError);
+    // Ưu tiên chạy Gemini trước
     return await gradeWithGemini(content, testPrompt, taskType);
+  } catch (geminiError) {
+    // Nếu Gemini lỗi, log cảnh báo và fallback sang Groq
+    console.warn("[grader] Gemini failed, falling back to Groq:", geminiError);
+    return await gradeWithGroq(content, testPrompt, taskType);
   }
 }
