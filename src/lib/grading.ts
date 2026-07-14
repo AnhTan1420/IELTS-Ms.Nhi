@@ -1,10 +1,9 @@
 import Groq from "groq-sdk";
-import { GoogleGenAI } from "@google/genai"; // Thay đổi SDK mới ở đây
+import { GoogleGenAI } from "@google/genai";
 import type { GradingFeedback } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────
 // Unified prompt builder — one function for Task 1 & Task 2
-// Replaces TASK1_SYSTEM_PROMPT + TASK2_SYSTEM_PROMPT constants
 // ─────────────────────────────────────────────────────────────
 
 type TaskType = "task1" | "task2";
@@ -107,18 +106,18 @@ No markdown fences. No preamble. Match EXACTLY this shape:
   "overall_band": number,        // half-band: 5.0 / 5.5 / 6.0 / 6.5 / 7.0 / 7.5 / 8.0 / 8.5 / 9.0
   "examiner_summary": string,
   "task1": {
-    "band": number,              // half-band (mean of TA+CC+LR+GRA rounded to nearest 0.5)
-    "TA": number,                // integer 1–9
-    "CC": number,                // integer 1–9
-    "LR": number,                // integer 1–9
-    "GRA": number                // integer 1–9
+    "band": number,
+    "TA": number,
+    "CC": number,
+    "LR": number,
+    "GRA": number
   } | null,
   "task2": {
-    "band": number,              // half-band (mean of TR+CC+LR+GRA rounded to nearest 0.5)
-    "TR": number,                // integer 1–9
-    "CC": number,                // integer 1–9
-    "LR": number,                // integer 1–9
-    "GRA": number                // integer 1–9
+    "band": number,
+    "TR": number,
+    "CC": number,
+    "LR": number,
+    "GRA": number
   } | null,
   "corrections": [
     {
@@ -134,40 +133,54 @@ No markdown fences. No preamble. Match EXACTLY this shape:
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
-/** Round x to nearest 0.5, clamped to [1, 9] — for task band & overall_band */
 function toHalfBand(x: number): number {
   return Math.round(Math.min(Math.max(x, 1), 9) * 2) / 2;
 }
 
-/** Round x to nearest integer, clamped to [1, 9] — for component scores */
 function toInteger(x: number): number {
   return Math.round(Math.min(Math.max(x, 1), 9));
 }
 
 /**
- * Sanitize AI output to enforce IELTS scoring rules:
- * - Component scores (TA/TR, CC, LR, GRA) → integer 1–9
- * - Task band & overall_band → half-band (nearest 0.5)
+ * Sanitize AI output: Bọc thép các trường hợp AI nhầm lẫn TA/TR hoặc nhầm Object Task1/Task2
  */
-function sanitizeBands(raw: GradingFeedback): GradingFeedback {
+function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedback {
+  // 1. CHỐNG ẢO GIÁC: Đang chấm Task 1 nhưng AI lại nhét kết quả vào object `task2`
+  if (taskType === "task1" && !raw.task1 && raw.task2) {
+    raw.task1 = raw.task2 as any;
+    raw.task2 = null;
+  } else if (taskType === "task2" && !raw.task2 && raw.task1) {
+    raw.task2 = raw.task1 as any;
+    raw.task1 = null;
+  }
+
+  // 2. CHUẨN HOÁ TASK 1
   if (raw.task1) {
-    raw.task1.TA  = toInteger(raw.task1.TA);
-    raw.task1.CC  = toInteger(raw.task1.CC);
-    raw.task1.LR  = toInteger(raw.task1.LR);
-    raw.task1.GRA = toInteger(raw.task1.GRA);
-    // Recalculate band from components if AI got it wrong
+    // Tránh việc AI trả về key TR thay vì TA
+    const taScore = raw.task1.TA ?? (raw.task1 as any).TR ?? 1;
+    raw.task1.TA  = toInteger(taScore);
+    raw.task1.CC  = toInteger(raw.task1.CC ?? 1);
+    raw.task1.LR  = toInteger(raw.task1.LR ?? 1);
+    raw.task1.GRA = toInteger(raw.task1.GRA ?? 1);
+    
     const mean = (raw.task1.TA + raw.task1.CC + raw.task1.LR + raw.task1.GRA) / 4;
     raw.task1.band = toHalfBand(mean);
   }
+
+  // 3. CHUẨN HOÁ TASK 2
   if (raw.task2) {
-    raw.task2.TR  = toInteger(raw.task2.TR);
-    raw.task2.CC  = toInteger(raw.task2.CC);
-    raw.task2.LR  = toInteger(raw.task2.LR);
-    raw.task2.GRA = toInteger(raw.task2.GRA);
+    // Tránh việc AI trả về key TA thay vì TR
+    const trScore = raw.task2.TR ?? (raw.task2 as any).TA ?? 1;
+    raw.task2.TR  = toInteger(trScore);
+    raw.task2.CC  = toInteger(raw.task2.CC ?? 1);
+    raw.task2.LR  = toInteger(raw.task2.LR ?? 1);
+    raw.task2.GRA = toInteger(raw.task2.GRA ?? 1);
+    
     const mean = (raw.task2.TR + raw.task2.CC + raw.task2.LR + raw.task2.GRA) / 4;
     raw.task2.band = toHalfBand(mean);
   }
-  // overall_band: T1 × 1/3 + T2 × 2/3 (or just the task that exists)
+
+  // 4. TÍNH TOÁN LẠI OVERALL BAND
   if (raw.task1 && raw.task2) {
     raw.overall_band = toHalfBand((raw.task1.band + raw.task2.band * 2) / 3);
   } else if (raw.task1) {
@@ -175,11 +188,12 @@ function sanitizeBands(raw: GradingFeedback): GradingFeedback {
   } else if (raw.task2) {
     raw.overall_band = raw.task2.band;
   }
+
   return raw;
 }
 
 /** Pull the JSON block out of a mixed markdown+JSON response */
-function extractJson(raw: string): GradingFeedback {
+function extractJson(raw: string, taskType: TaskType): GradingFeedback {
   const end = raw.lastIndexOf("}");
   if (end === -1) {
     throw new Error("Không tìm thấy dấu đóng ngoặc nhọn '}' nào trong phản hồi của AI.");
@@ -188,12 +202,10 @@ function extractJson(raw: string): GradingFeedback {
   let balance = 0;
   let start = -1;
 
-  // ĐI NGƯỢC từ dấu '}' cuối cùng về đầu để tìm dấu '{' cặp với nó
   for (let i = end; i >= 0; i--) {
     if (raw[i] === "}") balance++;
     if (raw[i] === "{") balance--;
 
-    // Khi balance về đúng 0, ta đã tìm được dấu { ngoài cùng của Object cha
     if (balance === 0) {
       start = i;
       break;
@@ -208,7 +220,8 @@ function extractJson(raw: string): GradingFeedback {
 
   try {
     const parsed = JSON.parse(jsonString) as GradingFeedback;
-    return sanitizeBands(parsed);
+    // Bỏ thêm taskType vào hàm sanitize
+    return sanitizeBands(parsed, taskType);
   } catch (parseError) {
     console.error("❌ Thất bại khi parse JSON từ AI. Chuỗi trích xuất được là:");
     console.error(jsonString);
@@ -236,18 +249,18 @@ async function gradeWithGroq(
   });
 
   const raw = completion.choices[0]?.message?.content ?? "";
-  return extractJson(raw);
+  // Truyền taskType để sanitize
+  return extractJson(raw, taskType);
 }
 
 // ─────────────────────────────────────────────────────────────
-// Provider: Gemini (fallback) - ĐÃ UPDATE LÊN SDK @google/genai
+// Provider: Gemini
 // ─────────────────────────────────────────────────────────────
 async function gradeWithGemini(
   content: string,
   testPrompt: string,
   taskType: TaskType,
 ): Promise<GradingFeedback> {
-  // Khởi tạo client theo chuẩn SDK mới
   const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY });
 
   const response = await ai.models.generateContent({
@@ -259,30 +272,21 @@ async function gradeWithGemini(
     },
   });
 
-  // response.text là getter dạng thuộc tính, không cần gọi hàm ()
-  return extractJson(response.text || "");
+  // Truyền taskType để sanitize
+  return extractJson(response.text || "", taskType);
 }
 
 // ─────────────────────────────────────────────────────────────
-// Public API — Groq first, Gemini fallback
+// Public API
 // ─────────────────────────────────────────────────────────────
-
-/**
- * Grades an IELTS Writing submission.
- * @param content    - Student essay text
- * @param testPrompt - The IELTS writing question / chart description
- * @param taskType   - "task1" | "task2" — drives the scoring criteria and prompt sections
- */
 export async function gradeSubmission(
   content: string,
   testPrompt: string,
   taskType: TaskType = "task2",
 ): Promise<GradingFeedback> {
   try {
-    // Ưu tiên chạy Gemini trước
     return await gradeWithGemini(content, testPrompt, taskType);
   } catch (geminiError) {
-    // Nếu Gemini lỗi, log cảnh báo và fallback sang Groq
     console.warn("[grader] Gemini failed, falling back to Groq:", geminiError);
     return await gradeWithGroq(content, testPrompt, taskType);
   }
