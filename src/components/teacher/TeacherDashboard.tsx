@@ -289,13 +289,26 @@ export default function TeacherDashboard() {
     setIsGrading(true);
     setError(null);
 
-    const testPrompt = [submission.tests.task1_prompt, submission.tests.task2_prompt].filter(Boolean).join("\n\n");
+    // 1. Xác định xem bài nộp này là Task 1 hay Task 2.
+    // Nếu bảng 'submissions' trong Supabase của bạn có cột phân loại (vd: task_type hoặc task), hãy dùng nó.
+    // Ở đây ta ép kiểu tạm thời hoặc dùng trực tiếp nếu kiểu dữ liệu đã khai báo.
+    const taskType = (submission as any).task_type || "task2"; 
+
+    // 2. Chỉ gửi đúng đề bài (prompt) của Task tương ứng để AI chấm chính xác nhất
+    const testPrompt = taskType === "task1" 
+      ? submission.tests.task1_prompt 
+      : submission.tests.task2_prompt;
 
     try {
       const response = await fetch("/api/grade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId: submission.id, content: submission.content, testPrompt }),
+        body: JSON.stringify({ 
+          submissionId: submission.id, 
+          content: submission.content, 
+          testPrompt,
+          taskType // ✨ QUAN TRỌNG: Đã truyền kèm taskType lên API mới
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Chấm bài thất bại.");
