@@ -2,11 +2,6 @@ import Groq from "groq-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { GradingFeedback } from "@/lib/types";
 
-// ─────────────────────────────────────────────────────────────
-// Unified prompt builder — one function for Task 1 & Task 2
-// Replaces TASK1_SYSTEM_PROMPT + TASK2_SYSTEM_PROMPT constants
-// ─────────────────────────────────────────────────────────────
-
 type TaskType = "task1" | "task2";
 
 const TASK_CONFIG = {
@@ -35,8 +30,6 @@ Briefly unpack the provided question.
       "Did the essay address ALL parts of the question? Is the position clear and consistently maintained? Were ideas extended with examples and analysis — not just asserted?",
   },
 } as const;
-
-type TaskType = keyof typeof TASK_CONFIG;
 
 function buildSystemPrompt(taskType: TaskType): string {
   const t = TASK_CONFIG[taskType];
@@ -101,17 +94,17 @@ After the structured markdown sections, output a single valid JSON object.
 No markdown fences. No preamble. Match EXACTLY this shape:
 
 {
-  "overall_band": number, // MUST be a half-band (e.g., 5.0, 5.5, 6.0, 6.5)
+  "overall_band": number, // MUST be a half-band (e.g., 5.0, 5.5, 6.0)
   "examiner_summary": string,
   "task1": {
-    "band": number, // MUST be a half-band (e.g., 5.0, 5.5, 6.0)
+    "band": number, // MUST be a half-band
     "TA": number,   // MUST be an integer 1-9
     "CC": number,   // MUST be an integer 1-9
     "LR": number,   // MUST be an integer 1-9
     "GRA": number   // MUST be an integer 1-9
   } | null,
   "task2": {
-    "band": number, // MUST be a half-band (e.g., 5.0, 5.5, 6.0)
+    "band": number, // MUST be a half-band
     "TR": number,   // MUST be an integer 1-9
     "CC": number,   // MUST be an integer 1-9
     "LR": number,   // MUST be an integer 1-9
@@ -128,13 +121,25 @@ No markdown fences. No preamble. Match EXACTLY this shape:
 }
 
 // ─────────────────────────────────────────────────────────────
-// Helper: pull the JSON block out of a mixed markdown+JSON response
+// Helper: Trích xuất khối JSON an toàn nằm ở cuối chuỗi phản hồi
 // ─────────────────────────────────────────────────────────────
 function extractJson(raw: string): GradingFeedback {
-  const start = raw.lastIndexOf("{");
-  const end   = raw.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("No JSON block found in AI response");
-  return JSON.parse(raw.slice(start, end + 1)) as GradingFeedback;
+  // Tìm từ khóa đặc trưng của Object JSON gốc để tránh bắt nhầm các dấu ngoặc nhọn {} trong bài viết
+  const jsonStartMarker = raw.lastIndexOf('"overall_band"');
+  if (jsonStartMarker === -1) {
+    throw new Error("No valid JSON structure found in AI response");
+  }
+
+  // Tìm dấu mở ngoặc gốc '{' đứng trước cụm '"overall_band"' gần nhất
+  const start = raw.lastIndexOf("{", jsonStartMarker);
+  const end = raw.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Invalid JSON block boundaries");
+  }
+
+  const jsonString = raw.slice(start, end + 1).trim();
+  return JSON.parse(jsonString) as GradingFeedback;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -150,7 +155,6 @@ async function gradeWithGroq(
   const completion = await groq.chat.completions.create({
     model:       process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
     temperature: 0.2,
-    // No response_format: json_object — response is markdown + JSON mixed
     messages: [
       { role: "system", content: buildSystemPrompt(taskType) },
       { role: "user",   content: `Prompt:\n${testPrompt}\n\nEssay:\n${content}` },
@@ -170,11 +174,10 @@ async function gradeWithGemini(
   taskType: TaskType,
 ): Promise<GradingFeedback> {
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
-  const model  = genAI.getGenerativeModel({
-    model:             "gemini-1.5-flash",
+  const model = genAI.getGenerativeModel({
+    model:             "gemini-2.5-flash",
     systemInstruction: buildSystemPrompt(taskType),
     generationConfig:  { temperature: 0.2 },
-    // No responseMimeType: json — response is markdown + JSON mixed
   });
 
   const result = await model.generateContent(
@@ -184,15 +187,8 @@ async function gradeWithGemini(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Public API — Groq first, Gemini fallback
+// Public API — Groq trước, Gemini dự phòng
 // ─────────────────────────────────────────────────────────────
-
-/**
- * Grades an IELTS Writing submission.
- * @param content    - Student essay text
- * @param testPrompt - The IELTS writing question / chart description
- * @param taskType   - "task1" | "task2" — drives the scoring criteria and prompt sections
- */
 export async function gradeSubmission(
   content: string,
   testPrompt: string,
