@@ -227,7 +227,7 @@ async function gradeWithGroq(
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
   const completion = await groq.chat.completions.create({
-    model:       process.env.GROQ_MODEL ?? "llama-3.3-70b-specdec",
+    model:       process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
     temperature: 0.2,
     // No response_format: json_object — response is markdown + JSON mixed
     messages: [
