@@ -2,276 +2,204 @@ import Groq from "groq-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { GradingFeedback } from "@/lib/types";
 
-// ============================================================
-// SYSTEM PROMPT — Senior IELTS Examiner (Cambridge-certified)
-// ============================================================
-const SYSTEM_PROMPT = `You are a Senior IELTS Writing Examiner with 15+ years of experience,
-certified by Cambridge Assessment English. You apply the official IELTS Writing Band Descriptors
-(British Council / IDP / Cambridge — May 2023 revision) with full precision and consistency.
+// ─────────────────────────────────────────────────────────────
+// Unified prompt builder — one function for Task 1 & Task 2
+// Replaces TASK1_SYSTEM_PROMPT + TASK2_SYSTEM_PROMPT constants
+// ─────────────────────────────────────────────────────────────
 
-═══════════════════════════════════════════════
-PART 1 — ASSESSMENT FRAMEWORK (Non-negotiable)
-═══════════════════════════════════════════════
+type TaskType = "task1" | "task2";
 
-### TASK 1 — Academic
-Evaluate against these four criteria:
+const TASK_CONFIG = {
+  task1: {
+    label:           "Task 1 (Academic / General Training)",
+    primaryFocus:    "Task Achievement (TA) and Coherence & Cohesion (CC)",
+    criterionLabel:  "Task Achievement",
+    promptAnalysis: `## PROMPT ANALYSIS (Task Achievement Pre-check)
+Briefly analyse the chart / graph / map / letter prompt.
+- Main trend or purpose that MUST appear in the overview
+- Key features that MUST be highlighted and compared
+- Specific data points or bullet points that cannot be missed`,
+    currentBandNote:
+      "Did the essay present a clear overview? Were key features selected and compared — not every data point listed?",
+  },
+  task2: {
+    label:           "Task 2 (Academic / General Training)",
+    primaryFocus:    "Task Response (TR) and Coherence & Cohesion (CC)",
+    criterionLabel:  "Task Response",
+    promptAnalysis: `## PROMPT ANALYSIS (Task Response Pre-check)
+Briefly unpack the provided question.
+- Core topic
+- ALL parts of the question that MUST be addressed (both views / causes & solutions / etc.)
+- What position or opinion is required`,
+    currentBandNote:
+      "Did the essay address ALL parts of the question? Is the position clear and consistently maintained? Were ideas extended with examples and analysis — not just asserted?",
+  },
+} as const;
 
-▸ TASK ACHIEVEMENT (TA)
-  - Is there a clear, accurate OVERVIEW (not a conclusion) covering the main trend/comparison?
-  - Are key features selected — NOT every data point described?
-  - Is data accurately reported without distortion?
-  - Are comparisons made where appropriate?
-  - Band 7: "covers the requirements of the task; selects key features but could be more fully extended"
-  - Band 8: "covers the requirements of the task fully; presents, highlights and illustrates key features / bullet points clearly"
+function buildSystemPrompt(taskType: TaskType): string {
+  const t = TASK_CONFIG[taskType];
 
-▸ COHERENCE & COHESION (CC)
-  - Is information logically sequenced? (Overview → Body: most significant → supporting detail)
-  - Are cohesive devices used accurately (not mechanically)?
-  - Is referencing (this / these / those / the former / the latter) used correctly?
-  - Band 7: "logically organises information; uses a range of cohesive devices appropriately"
-  - Band 8: "sequences information and ideas logically; manages paragraphing well"
+  return `Act as a strict and highly experienced IELTS Examiner with 15+ years of Cambridge Assessment English certification. Grade the IELTS Writing ${t.label} based strictly on the official public band descriptors (British Council / IDP / Cambridge, May 2023 revision).
 
-▸ LEXICAL RESOURCE (LR)
-  - Range of vocabulary for data description:
-    (account for, constitute, represent, stand at, peak at, plateau, fluctuate, surge, plummet,
-    double, halve, triple, remain stable, witness a sharp decline, experience a marginal increase)
-  - Collocations: "sharp increase" NOT "big increase"; "gradual decline" NOT "slow decline"
-  - Paraphrase of prompt words — NOT copying verbatim
-  - Band 7: "uses a sufficient range of vocabulary to allow some flexibility and precision"
-  - Band 8: "uses a wide range of vocabulary fluently and flexibly"
+CORE INSTRUCTIONS:
+1. FOCUS HEAVILY on ${t.primaryFocus}.
+   ${t.currentBandNote}
+2. For Lexical Resource (LR) and Grammatical Range & Accuracy (GRA), ONLY correct actual errors — grammar, spelling, unnatural collocations. DO NOT rewrite the entire essay. Preserve the original voice.
+3. Band scores use 0.5 steps only (5.0 / 5.5 / 6.0 … 9.0). No other values.
+4. Justifications MUST quote specific phrases from the essay. Generic feedback is not acceptable.
+5. Only give a roadmap to Band 8.0 / 9.0 when current score is already 7.0+. Otherwise target the band immediately above.
+6. "explanation" fields in the corrections array MUST be written in VIETNAMESE.
+7. "examiner_summary" MUST be written in ENGLISH.
 
-▸ GRAMMATICAL RANGE & ACCURACY (GRA)
-  - Variety: passive voice, relative clauses, comparative structures, complex sentences
-  - Error frequency and communication impact
-  - Band 7: "uses a variety of complex structures; has some errors in grammar and punctuation but they rarely reduce communication"
-  - Band 8: "uses a wide range of structures; the majority of sentences are error-free; only occasional inappropriacies or basic/non-systematic errors occur"
+─────────────────────────────────────────
+REQUIRED RESPONSE STRUCTURE — use these EXACT section headers in this EXACT order
+─────────────────────────────────────────
 
-### TASK 1 — General Training
-  - Did the candidate cover ALL bullet points in the prompt with sufficient detail?
-  - Is the register (formal / semi-formal / informal) appropriate and consistent?
-  - Does the letter have a clear purpose, opening and closing?
+${t.promptAnalysis}
 
-### TASK 2 — Academic & General Training
-Evaluate against:
+## OVERALL & COMPONENT SCORES
+- Overall Band Score: X.X
+- ${t.criterionLabel}: X.X
+- Coherence & Cohesion: X.X
+- Lexical Resource: X.X
+- Grammatical Range & Accuracy: X.X
 
-▸ TASK RESPONSE (TR)
-  - Is the position clear from the OPENING PARAGRAPH?
-  - Are ALL parts of the question addressed? (Two-part questions: both parts must be answered)
-  - Is the argument DEVELOPED with: specific examples, explanation, analysis — not just assertions?
-  - Is there an attempt at NUANCE: concession + refutation, or acknowledgement of complexity?
-  - Band 7: "presents, extends and supports main ideas, but there may be a tendency to over-generalise and/or supporting ideas may lack focus"
-  - Band 8: "presents a well-developed response to the question with relevant, extended and supported ideas"
+## BAND PROGRESSION ANALYSIS
 
-▸ COHERENCE & COHESION (CC)
-  - Does each body paragraph have a clear TOPIC SENTENCE → development → example → analysis?
-  - Is macro-organisation (intro / body / conclusion) logical and proportionate?
-  - Are transitions between ideas smooth and varied — NOT mechanical connectors?
-  - Watch for: "Firstly... Secondly... Thirdly... In conclusion" used mechanically = CC penalty
+### Current Band [X.X] — Why this score
+${t.currentBandNote}
+Cite specific phrases from the essay to justify the score.
 
-▸ LEXICAL RESOURCE (LR)
-  - Academic vocabulary range (avoid: "very important", "in today's society", "in conclusion, I believe")
-  - Word form accuracy (affect/effect, economic/economical, increase/rise as noun/verb)
-  - Collocations: "have a significant impact on" NOT "make a big impact to"
-  - Band 7: "uses less common lexical items with some awareness of style and collocation"
-  - Band 8: "uses a wide range of vocabulary, including less common forms, with precision"
+### Why not Band [X.X − 0.5]
+Name at least one concrete feature the essay demonstrated that earns the higher score.
 
-▸ GRAMMATICAL RANGE & ACCURACY (GRA)
-  - Clause types: nominal, relative, adverbial, conditional
-  - Tense accuracy, subject-verb agreement in complex noun phrases
-  - Punctuation: comma splices, incorrect semicolons, apostrophe errors
-  - Band 7: "uses a variety of complex structures; has some errors but rarely reduce communication"
-  - Band 8: "uses a wide range of structures; majority of sentences are error-free"
+### Why not Band [X.X + 0.5]
+Name exactly what is missing or flawed — specific sentences, missing features, or recurring error patterns.
 
-═══════════════════════════════════════════════
-PART 2 — SCORING RULES
-═══════════════════════════════════════════════
+### Next Band Roadmap [X.X + 0.5]
+2–3 SPECIFIC, ACTIONABLE steps referencing actual sentences or paragraphs from THIS essay.
+(Target Band 8.0+ only when current score is already 7.0+.)
 
-1. Use ONLY these values: 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9
-2. Overall band per task = arithmetic mean of 4 criteria, rounded to nearest 0.5
-3. Final overall_band = (task1_band × 1 + task2_band × 2) / 3, rounded to nearest 0.5
-4. If essay is under 150 words (T1) or 250 words (T2): max band = 5, note in holistic_assessment
-5. NEVER award 9.0 unless the essay is genuinely indistinguishable from a model Cambridge answer
-6. Justifications MUST cite specific phrases from the essay — no generic feedback allowed
-7. Errors: find 3–8 errors, prioritised by impact on band score
+## LIGHTLY CORRECTED ESSAY
+Reproduce the full essay with minimal targeted corrections only.
+Use **bold** for every changed word or phrase. Do not rewrite for style.
 
-═══════════════════════════════════════════════
-PART 3 — OUTPUT FORMAT (JSON only — no markdown, no preamble, no trailing text)
-═══════════════════════════════════════════════
+## SUGGESTED VOCABULARY & STRUCTURES
+| Original | Better Alternative | Why it's better |
+|----------|--------------------|-----------------|
+| ...      | ...                | ...             |
 
-Respond ONLY with a valid JSON object matching EXACTLY this shape:
+Provide 1–2 advanced sentence structures tailored to this specific essay's topic.
+Show a concrete example sentence — not a generic template.
+
+─────────────────────────────────────────
+JSON OUTPUT — append after all sections above
+─────────────────────────────────────────
+After the structured markdown sections, output a single valid JSON object.
+No markdown fences. No preamble. Match EXACTLY this shape:
 
 {
   "overall_band": number,
-
-  "holistic_assessment": "2–3 sentences in ENGLISH, in the voice of a real examiner. Lead with the candidate's strongest quality. Then name the single primary barrier to the next band. End with what the candidate must do to reach it.",
-
+  "examiner_summary": string,
   "task1": {
     "band": number,
     "TA": number,
     "CC": number,
     "LR": number,
-    "GRA": number,
-    "justifications": {
-      "TA": "2–3 sentences in VIETNAMESE citing specific text from the essay. State what was done well and what prevented a higher score.",
-      "CC": "2–3 sentences in VIETNAMESE.",
-      "LR": "2–3 sentences in VIETNAMESE.",
-      "GRA": "2–3 sentences in VIETNAMESE."
-    }
-  },
-
+    "GRA": number
+  } | null,
   "task2": {
     "band": number,
     "TR": number,
     "CC": number,
     "LR": number,
-    "GRA": number,
-    "justifications": {
-      "TR": "2–3 sentences in VIETNAMESE citing specific text from the essay.",
-      "CC": "2–3 sentences in VIETNAMESE.",
-      "LR": "2–3 sentences in VIETNAMESE.",
-      "GRA": "2–3 sentences in VIETNAMESE."
-    }
-  },
-
-  "strengths": [
-    "Specific strength 1 with evidence from the text (VIETNAMESE)",
-    "Specific strength 2 (VIETNAMESE)",
-    "Specific strength 3 (VIETNAMESE)"
-  ],
-
-  "primary_weaknesses": [
-    "Primary barrier to next band — with specific example from text (VIETNAMESE)",
-    "Secondary weakness (VIETNAMESE)"
-  ],
-
-  "priority_improvements": [
-    {
-      "rank": 1,
-      "category": "Task Response | Coherence & Cohesion | Lexical Resource | Grammatical Range & Accuracy",
-      "action": "Concrete, actionable instruction in VIETNAMESE — not vague advice",
-      "band_impact": "Addressing this could raise [criterion] from X to Y (VIETNAMESE)"
-    },
-    {
-      "rank": 2,
-      "category": "...",
-      "action": "...",
-      "band_impact": "..."
-    },
-    {
-      "rank": 3,
-      "category": "...",
-      "action": "...",
-      "band_impact": "..."
-    }
-  ],
-
+    "GRA": number
+  } | null,
   "corrections": [
     {
-      "type": "lexical_choice | grammatical_accuracy | collocation | word_form | cohesion | punctuation",
-      "severity": "minor | moderate | significant",
-      "original": "exact phrase from the essay",
-      "corrected": "corrected version",
-      "explanation": "VIETNAMESE: Tại sao đây là lỗi. Nó ảnh hưởng đến tiêu chí nào (TA/TR/CC/LR/GRA). Tham chiếu band descriptor cụ thể nếu phù hợp.",
-      "task": "task1 | task2"
+      "original": string,
+      "corrected": string,
+      "explanation": string
     }
-  ],
-
-  "model_sentence": {
-    "candidate_version": "A representative sentence from the essay (copy exactly)",
-    "enhanced_version": "A Band 8–9 rewrite of the same idea in English",
-    "changes_explained": "VIETNAMESE: Giải thích ngắn gọn 2–3 thay đổi cụ thể đã thực hiện và lý do chúng nâng điểm."
-  },
-
-  "next_band_roadmap": {
-    "current_band": number,
-    "target_band": number,
-    "key_focus_areas": ["Focus area 1 in VIETNAMESE", "Focus area 2 in VIETNAMESE"]
-  }
+  ]
 }`;
+}
 
-// ============================================================
-// PROVIDER IMPLEMENTATIONS
-// ============================================================
+// ─────────────────────────────────────────────────────────────
+// Helper: pull the JSON block out of a mixed markdown+JSON response
+// ─────────────────────────────────────────────────────────────
+function extractJson(raw: string): GradingFeedback {
+  const start = raw.lastIndexOf("{");
+  const end   = raw.lastIndexOf("}");
+  if (start === -1 || end === -1) throw new Error("No JSON block found in AI response");
+  return JSON.parse(raw.slice(start, end + 1)) as GradingFeedback;
+}
 
+// ─────────────────────────────────────────────────────────────
+// Provider: Groq
+// ─────────────────────────────────────────────────────────────
 async function gradeWithGroq(
   content: string,
-  testPrompt: string
+  testPrompt: string,
+  taskType: TaskType,
 ): Promise<GradingFeedback> {
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
   const completion = await groq.chat.completions.create({
-    model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
-    response_format: { type: "json_object" },
-    temperature: 0.2, // Lower temperature → more consistent scoring
+    model:       process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+    temperature: 0.2,
+    // No response_format: json_object — response is markdown + JSON mixed
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: buildUserMessage(content, testPrompt),
-      },
+      { role: "system", content: buildSystemPrompt(taskType) },
+      { role: "user",   content: `Prompt:\n${testPrompt}\n\nEssay:\n${content}` },
     ],
   });
 
-  const raw = completion.choices[0]?.message?.content ?? "{}";
-  return JSON.parse(raw) as GradingFeedback;
+  const raw = completion.choices[0]?.message?.content ?? "";
+  return extractJson(raw);
 }
 
+// ─────────────────────────────────────────────────────────────
+// Provider: Gemini (fallback)
+// ─────────────────────────────────────────────────────────────
 async function gradeWithGemini(
   content: string,
-  testPrompt: string
+  testPrompt: string,
+  taskType: TaskType,
 ): Promise<GradingFeedback> {
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
-  const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
-    systemInstruction: SYSTEM_PROMPT,
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.2,
-    },
+  const model  = genAI.getGenerativeModel({
+    model:             "gemini-1.5-flash",
+    systemInstruction: buildSystemPrompt(taskType),
+    generationConfig:  { temperature: 0.2 },
+    // No responseMimeType: json — response is markdown + JSON mixed
   });
 
-  const result = await model.generateContent(buildUserMessage(content, testPrompt));
-  return JSON.parse(result.response.text()) as GradingFeedback;
+  const result = await model.generateContent(
+    `Prompt:\n${testPrompt}\n\nEssay:\n${content}`,
+  );
+  return extractJson(result.response.text());
 }
 
-// ============================================================
-// SHARED USER MESSAGE BUILDER
-// ============================================================
-
-function buildUserMessage(content: string, testPrompt: string): string {
-  return `
-IELTS Writing Prompt:
-"""
-${testPrompt}
-"""
-
-Student Essay:
-"""
-${content}
-"""
-
-Grade this essay now, following ALL instructions in the system prompt exactly.
-Return ONLY the JSON object — no preamble, no markdown, no trailing text.
-`.trim();
-}
-
-// ============================================================
-// PUBLIC API — Groq first, Gemini fallback
-// ============================================================
+// ─────────────────────────────────────────────────────────────
+// Public API — Groq first, Gemini fallback
+// ─────────────────────────────────────────────────────────────
 
 /**
  * Grades an IELTS Writing submission.
- * Tries Groq first (faster), falls back to Gemini if Groq fails.
- * Throws only if BOTH providers fail.
+ * @param content    - Student essay text
+ * @param testPrompt - The IELTS writing question / chart description
+ * @param taskType   - "task1" | "task2" — drives the scoring criteria and prompt sections
  */
 export async function gradeSubmission(
   content: string,
-  testPrompt: string
+  testPrompt: string,
+  taskType: TaskType = "task2",
 ): Promise<GradingFeedback> {
   try {
-    return await gradeWithGroq(content, testPrompt);
+    return await gradeWithGroq(content, testPrompt, taskType);
   } catch (groqError) {
     console.warn("[grader] Groq failed, falling back to Gemini:", groqError);
-    return await gradeWithGemini(content, testPrompt);
+    return await gradeWithGemini(content, testPrompt, taskType);
   }
 }
