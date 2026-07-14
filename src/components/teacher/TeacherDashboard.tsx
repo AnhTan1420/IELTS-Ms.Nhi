@@ -613,71 +613,75 @@ export default function TeacherDashboard() {
                           </div>
 
                           <div className="grid gap-5 sm:grid-cols-2">
-                            {/* Task 1 Card */}
-                            {selectedSubmission.feedback.task1 && (
-                              <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
-                                <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                                  <span className="font-bold text-slate-800 flex items-center gap-2">
-                                    <ImageIcon className="h-4 w-4 text-slate-400" /> Task 1
-                                  </span>
-                                  <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
-                                    Band {selectedSubmission.feedback.task1.band}
-                                  </span>
-                                </div>
-                                <div className="p-5">
-                                  <dl className="space-y-3 text-sm">
-                                    {[
-                                      { label: "Task Achievement", score: selectedSubmission.feedback.task1.TA },
-                                      { label: "Coherence & Cohesion", score: selectedSubmission.feedback.task1.CC },
-                                      { label: "Lexical Resource", score: selectedSubmission.feedback.task1.LR },
-                                      { label: "Grammar", score: selectedSubmission.feedback.task1.GRA }
-                                    ].map((item, i) => (
-                                      <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
-                                        <dt className="text-slate-500 font-medium">{item.label}</dt>
-                                        <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
-                                          {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
-                                            ? Math.round(Number(item.score)) 
-                                            : item.score}
-                                        </dd>
-                                      </div>
-                                    ))}
-                                  </dl>
-                                </div>
-                              </div>
-                            )}
+                          {/* Task 1 Card */}
+{selectedSubmission.feedback.task1 && (
+  <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
+    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+      <span className="font-bold text-slate-800 flex items-center gap-2">
+        <ImageIcon className="h-4 w-4 text-slate-400" /> Task 1
+      </span>
+      {/* Giữ nguyên Band điểm lẻ */}
+      <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
+        Band {selectedSubmission.feedback.task1.band}
+      </span>
+    </div>
+    <div className="p-5">
+      <dl className="space-y-3 text-sm">
+        {[
+          { label: "Task Achievement", score: selectedSubmission.feedback.task1.TA },
+          { label: "Coherence & Cohesion", score: selectedSubmission.feedback.task1.CC },
+          { label: "Lexical Resource", score: selectedSubmission.feedback.task1.LR },
+          { label: "Grammar", score: selectedSubmission.feedback.task1.GRA }
+        ].map((item, i) => (
+          <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
+            <dt className="text-slate-500 font-medium">{item.label}</dt>
+            {/* Ép kiểu về số nguyên ở đây 👇 */}
+            <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
+              {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
+                ? Math.round(Number(item.score)) 
+                : item.score}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  </div>
+)}
 
-                            {/* Task 2 Card */}
-                            {selectedSubmission.feedback.task2 && (
-                              <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
-                                <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                                  <span className="font-bold text-slate-800 flex items-center gap-2">
-                                    <BookOpen className="h-4 w-4 text-slate-400" /> Task 2
-                                  </span>
-                                  <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
-                                    Band {selectedSubmission.feedback.task2.band}
-                                  </span>
-                                </div>
-                                <div className="p-5">
-                                  <dl className="space-y-3 text-sm">
-                                    {[
-                                      { label: "Task Response", score: selectedSubmission.feedback.task2.TR },
-                                      { label: "Coherence & Cohesion", score: selectedSubmission.feedback.task2.CC },
-                                      { label: "Lexical Resource", score: selectedSubmission.feedback.task2.LR },
-                                      { label: "Grammar", score: selectedSubmission.feedback.task2.GRA }
-                                    ].map((item, i) => (
-                                      <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
-                                        <dt className="text-slate-500 font-medium">{item.label}</dt>
-                                        <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
-                                          {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
-                                            ? Math.round(Number(item.score)) 
-                                            : item.score}
-                                        </dd>
-                                      </div>
-                                    ))}
-                                  </dl>
-                                </div>
-                              </div>
-                            )}
+                           {/* Task 2 Card */}
+{selectedSubmission.feedback.task2 && (
+  <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
+    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+      <span className="font-bold text-slate-800 flex items-center gap-2">
+        <BookOpen className="h-4 w-4 text-slate-400" /> Task 2
+      </span>
+      {/* Giữ nguyên Band điểm lẻ */}
+      <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
+        Band {selectedSubmission.feedback.task2.band}
+      </span>
+    </div>
+    <div className="p-5">
+      <dl className="space-y-3 text-sm">
+        {[
+          { label: "Task Response", score: selectedSubmission.feedback.task2.TR },
+          { label: "Coherence & Cohesion", score: selectedSubmission.feedback.task2.CC },
+          { label: "Lexical Resource", score: selectedSubmission.feedback.task2.LR },
+          { label: "Grammar", score: selectedSubmission.feedback.task2.GRA }
+        ].map((item, i) => (
+          <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
+            <dt className="text-slate-500 font-medium">{item.label}</dt>
+            {/* Ép kiểu về số nguyên ở đây 👇 */}
+            <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
+              {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
+                ? Math.round(Number(item.score)) 
+                : item.score}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  </div>
+)}
                           </div>
 
                           {/* Corrections Diff */}
