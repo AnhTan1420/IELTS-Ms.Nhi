@@ -22,7 +22,7 @@ import {
   Sparkles,
   ChevronRight,
   LogOut,
-  Download // Đã import thêm icon Download
+  Download 
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { SubmissionRow, TestRow } from "@/lib/types";
@@ -40,7 +40,6 @@ const statusLabels: Record<string, string> = {
   disqualified: "Hủy bài làm",
 };
 
-// Nâng cấp: Export File DOC đính kèm luôn cả Feedback của AI nếu có
 function handleDownloadDoc(studentName: string, content: string, feedback?: any) {
   const header =
     "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Times New Roman', serif; line-height: 1.6; color: #1e293b; } .feedback-box { background: #f0fdfa; border: 1px solid #ccfbf1; padding: 15px; border-radius: 8px; margin-top: 20px; } .correction { background: #fff; border: 1px solid #e2e8f0; padding: 10px; margin-bottom: 10px; border-radius: 4px; } .wrong { color: #ef4444; text-decoration: line-through; } .right { color: #10b981; font-weight: bold; } .reason { color: #64748b; font-size: 0.9em; }</style></head><body>";
@@ -88,32 +87,30 @@ export default function TeacherDashboard() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // MỚI: State quản lý Task đang chọn để chấm bài chủ động
+  const [selectedTaskType, setSelectedTaskType] = useState<"task1" | "task2">("task2");
+
   const [editingTest, setEditingTest] = useState<Partial<TestRow> | null>(null);
   const [isSavingTest, setIsSavingTest] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [showExportToast, setShowExportToast] = useState(false); // State cho Toast Export Text
+  const [showExportToast, setShowExportToast] = useState(false); 
 
   const router = useRouter();
 
-  // Hàm xử lý Export chỉ Text
   const handleExportRawText = (studentName: string, content: string) => {
     if (!content) return;
 
-    // 1. Tạo cấu trúc HTML cho MS Word hiểu được
     const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export</title></head><body>";
     const footer = "</body></html>";
     
-    // Sử dụng white-space: pre-wrap để giữ nguyên xuống dòng của bài làm
     const fullHtml = `${header}<p style="white-space: pre-wrap; font-family: 'Times New Roman'; font-size: 12pt;">${content}</p>${footer}`;
 
-    // 2. Chuyển Blob type thành application/msword
     const blob = new Blob([fullHtml], { type: "application/msword" });
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
     link.href = url;
-    // 3. Đổi đuôi file thành .doc
     link.download = `${studentName.replace(/\s+/g, "_")}.doc`; 
     
     document.body.appendChild(link);
@@ -121,18 +118,15 @@ export default function TeacherDashboard() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    // Hiển thị Toast thông báo
     setShowExportToast(true);
     setTimeout(() => setShowExportToast(false), 3000);
-};
-
-  // Hàm đăng xuất
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push("/login"); // Chuyển về trang login
   };
 
-  // Logic Auto Sign Out sau 30 phút (1,800,000 ms)
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
   useEffect(() => {
     if (!isAuthed) return;
 
@@ -143,14 +137,12 @@ export default function TeacherDashboard() {
       timeoutId = setTimeout(() => {
         handleSignOut();
         alert("Phiên làm việc đã hết hạn sau 30 phút không hoạt động.");
-      }, 1000 * 60 * 30); // 30 phút
+      }, 1000 * 60 * 30); 
     };
 
-    // Lắng nghe các hành động của người dùng
     window.addEventListener("mousemove", resetTimer);
     window.addEventListener("keydown", resetTimer);
 
-    // Khởi tạo bộ đếm lần đầu
     resetTimer();
 
     return () => {
@@ -172,6 +164,19 @@ export default function TeacherDashboard() {
     () => submissions.find((submission) => submission.id === selectedId) ?? submissions[0],
     [selectedId, submissions],
   );
+
+  // MỚI: Tự động đồng bộ nút chọn Task tương ứng với dữ liệu bài nộp cũ khi giáo viên đổi học sinh
+  useEffect(() => {
+    if (selectedSubmission) {
+      if ((selectedSubmission as any).task_type) {
+        setSelectedTaskType((selectedSubmission as any).task_type);
+      } else if (selectedSubmission.feedback?.task1 && !selectedSubmission.feedback?.task2) {
+        setSelectedTaskType("task1");
+      } else {
+        setSelectedTaskType("task2");
+      }
+    }
+  }, [selectedSubmission]);
 
   const loadTests = async () => {
     try {
@@ -289,12 +294,9 @@ export default function TeacherDashboard() {
     setIsGrading(true);
     setError(null);
 
-    // 1. Xác định xem bài nộp này là Task 1 hay Task 2.
-    // Nếu bảng 'submissions' trong Supabase của bạn có cột phân loại (vd: task_type hoặc task), hãy dùng nó.
-    // Ở đây ta ép kiểu tạm thời hoặc dùng trực tiếp nếu kiểu dữ liệu đã khai báo.
-    const taskType = (submission as any).task_type || "task2"; 
+    // THAY ĐỔI: Lấy trực tiếp từ state selectedTaskType do giáo viên chủ động lựa chọn
+    const taskType = selectedTaskType; 
 
-    // 2. Chỉ gửi đúng đề bài (prompt) của Task tương ứng để AI chấm chính xác nhất
     const testPrompt = taskType === "task1" 
       ? submission.tests.task1_prompt 
       : submission.tests.task2_prompt;
@@ -307,7 +309,7 @@ export default function TeacherDashboard() {
           submissionId: submission.id, 
           content: submission.content, 
           testPrompt,
-          taskType // ✨ QUAN TRỌNG: Đã truyền kèm taskType lên API mới
+          taskType 
         }),
       });
       const data = await response.json();
@@ -509,13 +511,11 @@ export default function TeacherDashboard() {
                   <div className="p-6 space-y-8 bg-slate-50/30">
                     <div>
                       <div className="flex items-center justify-between mb-4 border-b border-slate-200/80 pb-3">
-                        {/* Cấu trúc Flexbox: Tiêu đề + Nút Export nằm cạnh nhau */}
                         <div className="flex items-center gap-2">
                           <label className="text-[15px] font-bold text-slate-800 flex items-center gap-2">
                             <FileCheck2 className="h-5 w-5 text-slate-500" /> Nội dung bài làm
                           </label>
 
-                          {/* Nút Export (Chỉ hiển thị khi có nội dung) */}
                           {selectedSubmission.content && (
                             <div className="relative flex items-center">
                               <button
@@ -526,7 +526,6 @@ export default function TeacherDashboard() {
                                 <Download className="h-4 w-4" />
                               </button>
 
-                              {/* Toast Notification (Mini tooltip hiện khi xuất thành công) */}
                               {showExportToast && (
                                 <span className="absolute left-full ml-2 whitespace-nowrap bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded shadow-sm animate-in fade-in slide-in-from-left-2 z-10">
                                   Đã xuất file!
@@ -543,7 +542,6 @@ export default function TeacherDashboard() {
                         )}
                       </div>
 
-                      {/* Giao diện Đọc bài được nâng cấp */}
                       <div className="whitespace-pre-wrap font-serif text-[16px] leading-[2.2] bg-[#fcfcfc] border border-slate-300 rounded-xl px-8 py-8 shadow-inner min-h-[300px] text-slate-800 tracking-wide selection:bg-cyan-200">
                         {selectedSubmission.content?.trim() || <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa nhập nội dung nào...</span>}
                       </div>
@@ -551,6 +549,33 @@ export default function TeacherDashboard() {
 
                     {/* Action Buttons */}
                     <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
+                      
+                      {/* MỚI: Bộ chọn lựa chọn Task để chấm điểm cao cấp giúp giáo viên làm chủ hệ thống */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60 shadow-sm mr-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTaskType("task1")}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                            selectedTaskType === "task1"
+                              ? "bg-white text-cyan-700 shadow-sm border border-slate-200/40"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          Chấm Task 1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTaskType("task2")}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                            selectedTaskType === "task2"
+                              ? "bg-white text-cyan-700 shadow-sm border border-slate-200/40"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          Chấm Task 2
+                        </button>
+                      </div>
+
                       <button
                         onClick={() => handleGrade(selectedSubmission)}
                         disabled={isGrading || selectedSubmission.status === "in_progress" || !selectedSubmission.content}
@@ -613,75 +638,71 @@ export default function TeacherDashboard() {
                           </div>
 
                           <div className="grid gap-5 sm:grid-cols-2">
-                          {/* Task 1 Card */}
-{selectedSubmission.feedback.task1 && (
-  <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
-    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-      <span className="font-bold text-slate-800 flex items-center gap-2">
-        <ImageIcon className="h-4 w-4 text-slate-400" /> Task 1
-      </span>
-      {/* Giữ nguyên Band điểm lẻ */}
-      <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
-        Band {selectedSubmission.feedback.task1.band}
-      </span>
-    </div>
-    <div className="p-5">
-      <dl className="space-y-3 text-sm">
-        {[
-          { label: "Task Achievement", score: selectedSubmission.feedback.task1.TA },
-          { label: "Coherence & Cohesion", score: selectedSubmission.feedback.task1.CC },
-          { label: "Lexical Resource", score: selectedSubmission.feedback.task1.LR },
-          { label: "Grammar", score: selectedSubmission.feedback.task1.GRA }
-        ].map((item, i) => (
-          <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
-            <dt className="text-slate-500 font-medium">{item.label}</dt>
-            {/* Ép kiểu về số nguyên ở đây 👇 */}
-            <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
-              {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
-                ? Math.round(Number(item.score)) 
-                : item.score}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  </div>
-)}
+                            {/* Task 1 Card */}
+                            {selectedSubmission.feedback.task1 && (
+                              <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
+                                <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                                  <span className="font-bold text-slate-800 flex items-center gap-2">
+                                    <ImageIcon className="h-4 w-4 text-slate-400" /> Task 1
+                                  </span>
+                                  <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
+                                    Band {selectedSubmission.feedback.task1.band}
+                                  </span>
+                                </div>
+                                <div className="p-5">
+                                  <dl className="space-y-3 text-sm">
+                                    {[
+                                      { label: "Task Achievement", score: selectedSubmission.feedback.task1.TA },
+                                      { label: "Coherence & Cohesion", score: selectedSubmission.feedback.task1.CC },
+                                      { label: "Lexical Resource", score: selectedSubmission.feedback.task1.LR },
+                                      { label: "Grammar", score: selectedSubmission.feedback.task1.GRA }
+                                    ].map((item, i) => (
+                                      <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
+                                        <dt className="text-slate-500 font-medium">{item.label}</dt>
+                                        <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
+                                          {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
+                                            ? Math.round(Number(item.score)) 
+                                            : item.score}
+                                        </dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                </div>
+                              </div>
+                            )}
 
-                           {/* Task 2 Card */}
-{selectedSubmission.feedback.task2 && (
-  <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
-    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-      <span className="font-bold text-slate-800 flex items-center gap-2">
-        <BookOpen className="h-4 w-4 text-slate-400" /> Task 2
-      </span>
-      {/* Giữ nguyên Band điểm lẻ */}
-      <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
-        Band {selectedSubmission.feedback.task2.band}
-      </span>
-    </div>
-    <div className="p-5">
-      <dl className="space-y-3 text-sm">
-        {[
-          { label: "Task Response", score: selectedSubmission.feedback.task2.TR },
-          { label: "Coherence & Cohesion", score: selectedSubmission.feedback.task2.CC },
-          { label: "Lexical Resource", score: selectedSubmission.feedback.task2.LR },
-          { label: "Grammar", score: selectedSubmission.feedback.task2.GRA }
-        ].map((item, i) => (
-          <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
-            <dt className="text-slate-500 font-medium">{item.label}</dt>
-            {/* Ép kiểu về số nguyên ở đây 👇 */}
-            <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
-              {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
-                ? Math.round(Number(item.score)) 
-                : item.score}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  </div>
-)}
+                            {/* Task 2 Card */}
+                            {selectedSubmission.feedback.task2 && (
+                              <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
+                                <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                                  <span className="font-bold text-slate-800 flex items-center gap-2">
+                                    <BookOpen className="h-4 w-4 text-slate-400" /> Task 2
+                                  </span>
+                                  <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
+                                    Band {selectedSubmission.feedback.task2.band}
+                                  </span>
+                                </div>
+                                <div className="p-5">
+                                  <dl className="space-y-3 text-sm">
+                                    {[
+                                      { label: "Task Response", score: selectedSubmission.feedback.task2.TR },
+                                      { label: "Coherence & Cohesion", score: selectedSubmission.feedback.task2.CC },
+                                      { label: "Lexical Resource", score: selectedSubmission.feedback.task2.LR },
+                                      { label: "Grammar", score: selectedSubmission.feedback.task2.GRA }
+                                    ].map((item, i) => (
+                                      <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
+                                        <dt className="text-slate-500 font-medium">{item.label}</dt>
+                                        <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
+                                          {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
+                                            ? Math.round(Number(item.score)) 
+                                            : item.score}
+                                        </dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {/* Corrections Diff */}
@@ -903,7 +924,6 @@ export default function TeacherDashboard() {
         )}
       </div>
 
-      {/* Thêm chút CSS cho thanh cuộn (Scrollbar) nhìn mượt hơn */}
       <style dangerouslySetInnerHTML={{
         __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
