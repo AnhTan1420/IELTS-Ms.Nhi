@@ -634,7 +634,11 @@ export default function TeacherDashboard() {
                                     ].map((item, i) => (
                                       <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
                                         <dt className="text-slate-500 font-medium">{item.label}</dt>
-                                        <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">{item.score}</dd>
+                                        <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
+                                          {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
+                                            ? Math.round(Number(item.score)) 
+                                            : item.score}
+                                        </dd>
                                       </div>
                                     ))}
                                   </dl>
@@ -663,7 +667,11 @@ export default function TeacherDashboard() {
                                     ].map((item, i) => (
                                       <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
                                         <dt className="text-slate-500 font-medium">{item.label}</dt>
-                                        <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">{item.score}</dd>
+                                        <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
+                                          {item.score !== undefined && item.score !== null && !isNaN(Number(item.score)) 
+                                            ? Math.round(Number(item.score)) 
+                                            : item.score}
+                                        </dd>
                                       </div>
                                     ))}
                                   </dl>
