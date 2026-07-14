@@ -3,14 +3,22 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { gradeSubmission } from "@/lib/grading";
 
 export async function POST(request: Request) {
-  const { submissionId, content, testPrompt } = await request.json();
+  // 1. Nhận thêm taskType ("task1" hoặc "task2") từ frontend gửi lên
+  const { submissionId, content, testPrompt, taskType } = await request.json();
 
-  if (!submissionId || !content || !testPrompt) {
+  // 2. Thêm taskType vào danh sách bắt buộc phải có
+  if (!submissionId || !content || !testPrompt || !taskType) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
+  // (Optional) Kiểm tra xem taskType gửi lên có hợp lệ không
+  if (taskType !== "task1" && taskType !== "task2") {
+    return NextResponse.json({ error: "Invalid taskType" }, { status: 400 });
+  }
+
   try {
-    const feedback = await gradeSubmission(content, testPrompt);
+    // 3. Truyền báu vật taskType vào đây để hàm biết đường chọn prompt phù hợp
+    const feedback = await gradeSubmission(content, testPrompt, taskType);
 
     const { error } = await getSupabaseAdmin()
       .from("submissions")
