@@ -180,11 +180,25 @@ function sanitizeBands(raw: GradingFeedback): GradingFeedback {
 
 /** Pull the JSON block out of a mixed markdown+JSON response */
 function extractJson(raw: string): GradingFeedback {
-  const start = raw.lastIndexOf("{");
+  // 1. Sửa từ lastIndexOf thành indexOf để lấy dấu { đầu tiên của chuỗi JSON
+  const start = raw.indexOf("{"); 
   const end   = raw.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("No JSON block found in AI response");
-  const parsed = JSON.parse(raw.slice(start, end + 1)) as GradingFeedback;
-  return sanitizeBands(parsed);
+  
+  if (start === -1 || end === -1) {
+    throw new Error("No JSON block found in AI response");
+  }
+  
+  const jsonString = raw.slice(start, end + 1);
+  
+  try {
+    const parsed = JSON.parse(jsonString) as GradingFeedback;
+    return sanitizeBands(parsed);
+  } catch (parseError) {
+    // Thêm log này để nếu AI có viết lỗi cấu trúc JSON thì bạn vẫn nhìn thấy ở terminal
+    console.error("❌ Thất bại khi parse JSON từ AI. Chuỗi đã cắt:");
+    console.error(jsonString);
+    throw parseError;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
