@@ -50,7 +50,7 @@ async function gradeWithGroq(content: string, testPrompt: string): Promise<Gradi
  
   
   const completion = await groq.chat.completions.create({
-    model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+    model: process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
     response_format: { type: "json_object" }, // Ép Groq trả về JSON chuẩn
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
