@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { gradeSubmission } from "@/lib/grading";
 
-// Cấu hình để Vercel cho phép hàm chạy tối đa 60 giây (tránh lỗi 502)
+// Tăng giới hạn thời gian chạy trên Vercel lên 60 giây để tránh 502
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +36,6 @@ export async function POST(request: Request) {
       const fb1 = feedback1 as any;
       const fb2 = feedback2 as any;
 
-      // Tính điểm band
       const band1 = Number(fb1.task1?.band || fb1.overall_band || fb1.band || 0);
       const band2 = Number(fb2.task2?.band || fb2.overall_band || fb2.band || 0);
 
@@ -74,18 +73,15 @@ export async function POST(request: Request) {
     return NextResponse.json(feedback);
 
   } catch (error) {
-    // LOG LỖI CHI TIẾT LÊN SERVER CONSOLE (Chỉ bạn mới nhìn thấy trong Vercel Logs)
-    console.error("❌ GRADING FAILED - Chi tiết lỗi:");
-    if (error instanceof Error) {
-      console.error("Message:", error.message);
-      console.error("Stack:", error.stack);
-    } else {
-      console.error("Raw Error:", JSON.stringify(error, null, 2));
-    }
+    // 1. Log chi tiết lỗi vào Vercel (dùng để kiểm tra trên Vercel Dashboard)
+    console.error("❌ GRADING FAILED:", error);
     
-    // TRẢ VỀ LỖI MỀM CHO UI (Người dùng chỉ thấy thông báo này)
+    // 2. Trả về thông tin chi tiết cho Frontend (để F12 Console hiển thị)
+    const technicalDetail = error instanceof Error ? error.message : String(error);
+    
     return NextResponse.json({ 
-        error: "Hệ thống AI đang quá tải hoặc hết lượt dùng. Vui lòng thử lại sau ít phút hoặc liên hệ quản trị viên." 
+        error: "Hệ thống AI đang quá tải hoặc hết lượt dùng. Vui lòng thử lại sau ít phút hoặc liên hệ Anh Tân.",
+        detail: technicalDetail // Dòng này giúp bạn debug ở F12
     }, { status: 503 });
   }
 }
