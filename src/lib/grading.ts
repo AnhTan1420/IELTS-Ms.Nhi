@@ -169,7 +169,6 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
 
   // 2. CHUẨN HOÁ TASK 1
   if (raw.task1) {
-    // Tránh việc AI trả về key TR thay vì TA
     const taScore = raw.task1.TA ?? (raw.task1 as any).TR ?? 1;
     raw.task1.TA  = toInteger(taScore);
     raw.task1.CC  = toInteger(raw.task1.CC ?? 1);
@@ -182,7 +181,6 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
 
   // 3. CHUẨN HOÁ TASK 2
   if (raw.task2) {
-    // Tránh việc AI trả về key TA thay vì TR
     const trScore = raw.task2.TR ?? (raw.task2 as any).TA ?? 1;
     raw.task2.TR  = toInteger(trScore);
     raw.task2.CC  = toInteger(raw.task2.CC ?? 1);
@@ -207,29 +205,18 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
 
 /** Pull the JSON block out of a mixed markdown+JSON response */
 function extractJson(raw: string, taskType: TaskType): GradingFeedback {
-  const end = raw.lastIndexOf("}");
-  if (end === -1) {
-    throw new Error("Không tìm thấy dấu đóng ngoặc nhọn '}' nào trong phản hồi của AI.");
+  // Loại bỏ các thẻ markdown code block thừa thãi mà AI tự ý chèn vào
+  const cleanedRaw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+  const start = cleanedRaw.indexOf("{");
+  const end = cleanedRaw.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end < start) {
+    console.error("❌ Raw Output từ AI không chứa JSON:", raw);
+    throw new Error("Không tìm thấy cấu trúc JSON hợp lệ trong phản hồi của AI.");
   }
 
-  let balance = 0;
-  let start = -1;
-
-  for (let i = end; i >= 0; i--) {
-    if (raw[i] === "}") balance++;
-    if (raw[i] === "{") balance--;
-
-    if (balance === 0) {
-      start = i;
-      break;
-    }
-  }
-
-  if (start === -1) {
-    throw new Error("Không tìm thấy dấu mở ngoặc '{' tương ứng với khối JSON.");
-  }
-
-  const jsonString = raw.slice(start, end + 1);
+  const jsonString = cleanedRaw.slice(start, end + 1);
 
   try {
     const parsed = JSON.parse(jsonString) as GradingFeedback;
@@ -276,12 +263,18 @@ async function gradeWithGemini(
   const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY });
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.0-flash", // Sửa tên model thành phiên bản hợp lệ
     contents: `Prompt:\n${testPrompt}\n\nEssay:\n${content}`,
     config: {
       systemInstruction: buildSystemPrompt(taskType),
-      temperature: 0.1, // Giảm temperature xuống 0.1 để AI tập trung phân tích logic, tránh sáng tạo bừa bãi
+      temperature: 0.1,
       maxOutputTokens: 4096,
+      safetySettings: [ // Bổ sung safetySettings để tránh AI từ chối phản hồi vô cớ
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+      ],
     },
   });
 
@@ -299,7 +292,7 @@ export async function gradeSubmission(
   try {
     return await gradeWithGemini(content, testPrompt, taskType);
   } catch (geminiError) {
-    console.warn("[grader] Gemini failed, falling back to Groq:", geminiError);
+    console.warn("⚠️ [grader] Gemini failed, falling back to Groq:", geminiError);
     return await gradeWithGroq(content, testPrompt, taskType);
   }
 }
