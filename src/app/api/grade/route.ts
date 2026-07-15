@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { gradeSubmission } from "@/lib/grading";
 
+// TĂNG GIỚI HẠN THỜI GIAN CHẠY TRÊN VERCEL LÊN 60 GIÂY (Tránh lỗi 502 Bad Gateway)
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   // 1. Nhận các tham số từ frontend gửi lên
   const { submissionId, content, testPrompt, taskType, task1Prompt, task2Prompt } = await request.json();
@@ -84,6 +88,11 @@ export async function POST(request: Request) {
     return NextResponse.json(feedback);
   } catch (error) {
     console.error("Grading failed:", error);
-    return NextResponse.json({ error: "All AI providers failed" }, { status: 502 });
+    
+    // In thêm chi tiết lỗi để dễ debug nếu Vercel log lại
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("Lỗi chi tiết:", errMsg);
+
+    return NextResponse.json({ error: "All AI providers failed: " + errMsg }, { status: 502 });
   }
 }
