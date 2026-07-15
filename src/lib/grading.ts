@@ -205,26 +205,33 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
 
 /** Pull the JSON block out of a mixed markdown+JSON response */
 function extractJson(raw: string, taskType: TaskType): GradingFeedback {
-  // Loại bỏ các thẻ markdown code block thừa thãi mà AI tự ý chèn vào
-  const cleanedRaw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+  // 1. Dọn dẹp markdown
+  let jsonString = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
 
-  const start = cleanedRaw.indexOf("{");
-  const end = cleanedRaw.lastIndexOf("}");
+  // 2. Tìm vị trí bắt đầu và kết thúc của JSON
+  const start = jsonString.indexOf("{");
+  const end = jsonString.lastIndexOf("}");
 
   if (start === -1 || end === -1 || end < start) {
-    console.error("❌ Raw Output từ AI không chứa JSON:", raw);
-    throw new Error("Không tìm thấy cấu trúc JSON hợp lệ trong phản hồi của AI.");
+    throw new Error("Không tìm thấy cấu trúc JSON hợp lệ.");
   }
 
-  const jsonString = cleanedRaw.slice(start, end + 1);
+  jsonString = jsonString.slice(start, end + 1);
+
+  // 3. XỬ LÝ LỖI ESCAPE CHARACTER (Nguyên nhân gây lỗi 512)
+  // Thay thế các dòng xuống dòng thực tế bằng \n hợp lệ
+  jsonString = jsonString.replace(/\\n/g, "\\\\n")
+                        .replace(/\\r/g, "\\\\r")
+                        .replace(/\\t/g, "\\\\t");
 
   try {
     const parsed = JSON.parse(jsonString) as GradingFeedback;
     return sanitizeBands(parsed, taskType);
   } catch (parseError) {
-    console.error("❌ Thất bại khi parse JSON từ AI. Chuỗi trích xuất được là:");
-    console.error(jsonString);
-    throw parseError;
+    // Nếu vẫn lỗi, thử cách thủ công hơn: loại bỏ các ký tự điều khiển lạ
+    const cleaned = jsonString.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+    const parsed = JSON.parse(cleaned) as GradingFeedback;
+    return sanitizeBands(parsed, taskType);
   }
 }
 
