@@ -178,14 +178,18 @@ function extractJson(raw: string, taskType: TaskType): GradingFeedback {
 
 /** Lỗi có nên fallback sang model/provider khác hay không (rate limit/quota/quá tải) */
 function isFallbackWorthyError(err: any): boolean {
-  const status = err?.status ?? err?.response?.status;
+  const status = err?.status ?? err?.response?.status ?? err?.code;
   if (status === 429 || status === 413 || status === 503) return true;
+  if (status === "RESOURCE_EXHAUSTED" || status === "UNAVAILABLE") return true;
+
   const msg = String(err?.message ?? "").toLowerCase();
   return (
     msg.includes("rate_limit") ||
     msg.includes("quota") ||
     msg.includes("too large") ||
-    msg.includes("overloaded")
+    msg.includes("overloaded") ||
+    msg.includes("resource_exhausted") ||
+    msg.includes("exceeded your current quota")
   );
 }
 
@@ -234,36 +238,57 @@ async function gradeWithGroq(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Provider: Gemini
+// Provider: Gemini — thử 2.5 Flash (chất lượng cao) rồi 2.5 Flash-Lite (TPM/RPD rộng hơn)
 // ─────────────────────────────────────────────────────────────
+
+const GEMINI_MODEL_CHAIN: Array<{ model: string; maxOutputTokens: number }> = [
+  { model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash", maxOutputTokens: 4096 },
+  { model: "gemini-2.5-flash-lite", maxOutputTokens: 3500 },
+];
+
 async function gradeWithGemini(
   content: string,
   testPrompt: string,
   taskType: TaskType,
 ): Promise<GradingFeedback> {
   const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY });
+  const systemPrompt = buildSystemPrompt(taskType);
+  const userContent = `Prompt:\n${testPrompt}\n\nEssay:\n${content}`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
-    contents: `Prompt:\n${testPrompt}\n\nEssay:\n${content}`,
-    config: {
-      systemInstruction: buildSystemPrompt(taskType),
-      temperature: 0.1,
-      maxOutputTokens: 4096,
-      safetySettings: [
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-      ] as any,
-    },
-  });
+  let lastError: any;
 
-  return extractJson(response.text || "", taskType);
+  for (const { model, maxOutputTokens } of GEMINI_MODEL_CHAIN) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: userContent,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.1,
+          maxOutputTokens,
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+          ] as any,
+        },
+      });
+
+      return extractJson(response.text || "", taskType);
+    } catch (err: any) {
+      lastError = err;
+      if (!isFallbackWorthyError(err)) throw err; // lỗi thật (vd prompt bị block, input sai) → không che giấu
+      console.warn(`⚠️ [gemini] model ${model} thất bại (${err?.status ?? err?.code ?? "?"}), thử model kế tiếp...`);
+    }
+  }
+
+  throw lastError;
 }
 
 // ─────────────────────────────────────────────────────────────
-// Public API — Gemini trước, rớt xuống Groq (70b → 8b) nếu Gemini fail
+// Public API — Gemini (2.5 Flash → 2.5 Flash-Lite) trước,
+// rớt xuống Groq (70b → 8b) nếu cả 2 model Gemini đều fail
 // ─────────────────────────────────────────────────────────────
 export async function gradeSubmission(
   content: string,
