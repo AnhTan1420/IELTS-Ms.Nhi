@@ -43,13 +43,28 @@ function buildSystemPrompt(taskType: TaskType): string {
 CORE INSTRUCTIONS:
 1. FOCUS HEAVILY on ${t.primaryFocus}.
    ${t.currentBandNote}
-2. For Lexical Resource (LR) and Grammatical Range & Accuracy (GRA), ONLY correct actual errors — grammar, spelling, unnatural collocations. DO NOT rewrite the entire essay. Preserve the original voice.
+
+2. DETAILED GRAMMAR & VOCABULARY CORRECTIONS (LR & GRA):
+   - ONLY correct actual errors (grammar, spelling, tense, subject-verb agreement, unnatural collocations, missing passive auxiliaries, incorrect word forms, article clashes, double determiners).
+   - DO NOT rewrite sentences for purely stylistic preferences if the original is already grammatically correct and natural. Maintain the student's authentic voice.
+   - For every correction in the 'corrections' array and the table, the 'explanation' MUST be written in VIETNAMESE and follow these academic constraints:
+     * PROHIBITED EXPLANATIONS (Strictly Banned): Generic, lazy, or tautological phrases such as "Sử dụng từ X một cách chính xác", "Sửa cho đúng ngữ pháp", "Sửa lỗi dùng từ", "Dùng X thay cho Y để tự nhiên hơn" without explanation.
+     * REQUIRED EXPLANATIONS: You must explicitly name the exact linguistic or grammatical rule being violated. 
+       Examples of proper rule naming and explanation:
+       - "Lỗi thừa định từ (Double Determiners): Không sử dụng hai từ hạn định sở hữu 'our' và 'today\\'s' đứng liền nhau trước một danh từ. Sửa thành 'today\\'s world' hoặc 'our world today'."
+       - "Mâu thuẫn mạo từ và tính từ hạn định: Từ 'sole' mang nghĩa độc nhất, do đó danh từ đi sau nó bắt buộc phải đi kèm mạo từ xác định 'the' thay vì mạo từ bất định 'a'. Sửa thành 'the sole solution'."
+       - "Lỗi hòa hợp chủ - vị (Subject-Verb Agreement): Chủ ngữ số nhiều 'poverty and hunger' đòi hỏi động từ số nhiều 'remain' thay vì động từ số ít 'remains'."
+       - "Lỗi dùng sai dạng động từ sau giới từ (Gerund after preposition): Từ 'to' trong cụm 'contribute to' đóng vai trò là giới từ, do đó động từ theo sau phải là danh động từ 'alleviating' chứ không phải động từ nguyên thể 'alleviate'."
+       - "Lỗi thiếu trợ động từ trong cấu trúc câu bị động: Cấu trúc bị động với động từ khuyết thiếu phải là 'should be + V3/V-ed'. Viết 'should therefore halted' là thiếu động từ liên kết 'be'."
+       - "Lỗi sai từ loại (Word form error): 'sustain' và 'balance' là động từ nguyên mẫu, không thể đứng trước danh từ 'way' để bổ nghĩa. Cần chuyển thành các phân từ/tính từ 'sustainable' và 'balanced'."
+
 3. SCORING FORMAT — follow IELTS official rounding exactly:
    - Component scores (TA/TR, CC, LR, GRA): whole integers only — 1, 2, 3 … 9. Never decimals.
    - Task band & overall_band: rounded to nearest 0.5 — valid values: 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0 8.5 9.0
      Formula: task band = mean of 4 components, rounded to nearest 0.5
      Example: TA=6 CC=7 LR=7 GRA=7 → mean=6.75 → rounds to 7.0
      Example: TA=6 CC=6 LR=7 GRA=7 → mean=6.5 → stays 6.5
+
 4. Justifications MUST quote specific phrases from the essay. Generic feedback is not acceptable.
 5. Only give a roadmap to Band 8.0 / 9.0 when current score is already 7.0+. Otherwise target the band immediately above.
 6. LANGUAGE RULE: All evaluations, justifications, feedback, roadmap steps, analyses, vocabulary explanations, and JSON string values (including "examiner_summary" and "explanation") MUST be written in VIETNAMESE. Only the quoted phrases from the student's essay and the correction fields ("original", "corrected") remain in English.
@@ -119,9 +134,9 @@ No markdown fences. No preamble. Match EXACTLY this shape:
   } | null,
   "corrections": [
     {
-      "original": string,        // Câu gốc tiếng Anh của học sinh
-      "corrected": string,       // Câu đã sửa lỗi tiếng Anh
-      "explanation": string      // Giải thích chi tiết bằng TIẾNG VIỆT
+      "original": string,        // Câu gốc chứa lỗi sai của học sinh
+      "corrected": string,       // Câu đã được sửa lỗi
+      "explanation": string      // Giải thích chi tiết thuật ngữ ngữ pháp lỗi sai bằng TIẾNG VIỆT (Tuân thủ nghiêm ngặt CORE INSTRUCTION #2)
     }
   ]
 }`;
@@ -238,8 +253,8 @@ async function gradeWithGroq(
 
   const completion = await groq.chat.completions.create({
     model:       process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
-    temperature: 0.2,
-    max_tokens:  4096, // Cấu hình giới hạn tối đa tránh bị cắt cụt JSON nửa chừng
+    temperature: 0.1, // Giảm temperature xuống 0.1 để tăng tính nhất quán và độ chính xác của ngữ pháp
+    max_tokens:  4096,
     messages: [
       { role: "system", content: buildSystemPrompt(taskType) },
       { role: "user",   content: `Prompt:\n${testPrompt}\n\nEssay:\n${content}` },
@@ -265,8 +280,8 @@ async function gradeWithGemini(
     contents: `Prompt:\n${testPrompt}\n\nEssay:\n${content}`,
     config: {
       systemInstruction: buildSystemPrompt(taskType),
-      temperature: 0.2,
-      maxOutputTokens: 4096, // Tăng giới hạn token đầu ra để chứa được cả Markdown lẫn JSON hoàn chỉnh
+      temperature: 0.1, // Giảm temperature xuống 0.1 để AI tập trung phân tích logic, tránh sáng tạo bừa bãi
+      maxOutputTokens: 4096,
     },
   });
 
