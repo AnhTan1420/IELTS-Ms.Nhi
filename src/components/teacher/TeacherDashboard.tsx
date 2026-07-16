@@ -1288,7 +1288,7 @@ export default function TeacherDashboard() {
                               { label: "Task 1", text: parsedContent.task1Answer, icon: <ImageIcon className="h-3.5 w-3.5" /> },
                               { label: "Task 2", text: parsedContent.task2Answer, icon: <BookOpen className="h-3.5 w-3.5" /> },
                             ].map((task) => {
-                              const errorCount = countMatchedCorrections(task.text, selectedSubmission.feedback.corrections ?? []);
+                              const errorCount = countMatchedCorrections(task.text, selectedSubmission.feedback?.corrections ?? []);
                               return (
                                 <div key={task.label} className="rounded-2xl bg-white border border-slate-200/60 shadow-sm p-4 space-y-3">
                                   <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
