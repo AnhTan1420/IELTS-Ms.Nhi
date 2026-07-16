@@ -794,8 +794,8 @@ export default function TeacherDashboard() {
           <section
             className={`grid gap-6 items-start ${
               (selectedSubmission?.feedback?.corrections?.length ?? 0) > 0
-                ? "lg:grid-cols-[380px_1fr_320px]"
-                : "lg:grid-cols-[380px_1fr]"
+                ? "lg:grid-cols-[320px_1fr_280px]"
+                : "lg:grid-cols-[320px_1fr]"
             }`}
           >
             {/* Sidebar Danh sách */}
