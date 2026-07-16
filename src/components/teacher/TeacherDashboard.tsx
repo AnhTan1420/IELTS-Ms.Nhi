@@ -31,6 +31,7 @@ import {
   Archive,
   X,
   Type,
+  Lightbulb,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { SubmissionRow, TestRow } from "@/lib/types";
@@ -100,9 +101,15 @@ type Correction = { original: string; corrected: string; explanation: string };
  * Tô sáng các đoạn bị AI sửa ngay trong bài làm gốc. Với mỗi correction, tìm vị trí
  * "original" xuất hiện trong text (khớp chính xác, fallback không phân biệt hoa/thường),
  * bỏ qua các correction không tìm thấy hoặc bị chồng lấn vị trí với correction trước đó.
- * Hover vào đoạn tô vàng sẽ hiện đề xuất sửa + giải thích.
+ * Bấm vào đoạn tô vàng sẽ gọi onSelect để hiện chi tiết ở panel "Chi tiết phản hồi" bên cạnh.
+ * Đoạn đang được chọn (activeCorrection) sẽ đổi sang màu xanh cyan để phân biệt.
  */
-function renderHighlightedAnswer(text: string, corrections: Correction[]) {
+function renderHighlightedAnswer(
+  text: string,
+  corrections: Correction[],
+  activeCorrection: Correction | null,
+  onSelect: (correction: Correction) => void,
+) {
   if (!text) return text;
   if (!corrections || corrections.length === 0) return text;
 
@@ -136,18 +143,21 @@ function renderHighlightedAnswer(text: string, corrections: Correction[]) {
   let cursor = 0;
   filtered.forEach((m, i) => {
     if (m.start > cursor) nodes.push(text.slice(cursor, m.start));
+    const isActive = activeCorrection === m.correction;
     nodes.push(
-      <span key={i} className="group relative inline">
-        <span className="bg-amber-200/70 underline decoration-amber-500 decoration-2 underline-offset-2 rounded-sm px-0.5 cursor-help">
-          {text.slice(m.start, m.end)}
-        </span>
-        <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-72 max-w-[80vw] rounded-xl bg-slate-900 text-white text-xs p-3 shadow-xl z-20 font-sans normal-case tracking-normal leading-relaxed">
-          <span className="block font-bold text-emerald-300 mb-1">✅ Đề xuất sửa</span>
-          <span className="block mb-2 whitespace-pre-wrap">{m.correction.corrected}</span>
-          <span className="block font-bold text-cyan-300 mb-1">💡 Giải thích</span>
-          <span className="block whitespace-pre-wrap">{m.correction.explanation}</span>
-        </span>
-      </span>,
+      <button
+        key={i}
+        type="button"
+        onClick={() => onSelect(m.correction)}
+        title="Bấm để xem chi tiết đề xuất sửa"
+        className={`inline whitespace-normal border-0 appearance-none p-0 m-0 [font:inherit] text-inherit align-baseline rounded-sm px-0.5 cursor-pointer underline decoration-2 underline-offset-2 transition-colors ${
+          isActive
+            ? "bg-cyan-300/80 decoration-cyan-600 ring-2 ring-cyan-500"
+            : "bg-amber-200/70 decoration-amber-500 hover:bg-amber-300/80"
+        }`}
+      >
+        {text.slice(m.start, m.end)}
+      </button>,
     );
     cursor = m.end;
   });
@@ -289,6 +299,7 @@ export default function TeacherDashboard() {
     task1: false,
     task2: false,
   }); // Trạng thái thu gọn / mở rộng từng Task
+  const [activeCorrection, setActiveCorrection] = useState<Correction | null>(null); // Correction đang được chọn để xem ở panel "Chi tiết phản hồi"
   const router = useRouter();
 
   // ── State cho tính năng Chọn nhiều / Xóa hàng loạt / Tải tất cả ──
@@ -387,6 +398,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     setTeacherCommentDraft((selectedSubmission as any)?.teacher_comment ?? "");
     setExpandedTasks({ task1: false, task2: false });
+    setActiveCorrection(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubmission?.id]);
 
@@ -940,6 +952,13 @@ export default function TeacherDashboard() {
 
                   {/* Submission Body */}
                   <div className="p-6 space-y-8 bg-slate-50/30">
+                    <div
+                      className={
+                        (selectedSubmission.feedback?.corrections?.length ?? 0) > 0
+                          ? "grid gap-4 lg:grid-cols-[1fr_320px] items-start"
+                          : ""
+                      }
+                    >
                     <div>
                       <div className="flex items-center justify-between mb-4 border-b border-slate-200/80 pb-3">
                         {/* Cấu trúc Flexbox: Tiêu đề + Nút Export nằm cạnh nhau */}
@@ -988,7 +1007,7 @@ export default function TeacherDashboard() {
                       {(selectedSubmission.feedback?.corrections?.length ?? 0) > 0 && (
                         <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 w-fit">
                           <span className="inline-block h-3 w-3 rounded-sm bg-amber-200/70 border border-amber-400" />
-                          Di chuột vào phần được tô vàng để xem đề xuất sửa từ AI
+                          Bấm vào phần được tô vàng để xem chi tiết đề xuất sửa ở khung bên phải
                         </div>
                       )}
 
@@ -1045,7 +1064,12 @@ export default function TeacherDashboard() {
                                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Bài làm học sinh</p>
                                   <div className="whitespace-pre-wrap font-serif text-[15px] leading-[2] bg-[#fcfcfc] border border-slate-200 rounded-xl px-6 py-6 text-slate-800 tracking-wide selection:bg-cyan-200 min-h-[120px]">
                                     {parsedContent.task1Answer ? (
-                                      renderHighlightedAnswer(parsedContent.task1Answer, selectedSubmission.feedback?.corrections ?? [])
+                                      renderHighlightedAnswer(
+                                        parsedContent.task1Answer,
+                                        selectedSubmission.feedback?.corrections ?? [],
+                                        activeCorrection,
+                                        setActiveCorrection,
+                                      )
                                     ) : (
                                       <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa làm Task 1...</span>
                                     )}
@@ -1104,7 +1128,12 @@ export default function TeacherDashboard() {
                                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Bài làm học sinh</p>
                                   <div className="whitespace-pre-wrap font-serif text-[15px] leading-[2] bg-[#fcfcfc] border border-slate-200 rounded-xl px-6 py-6 text-slate-800 tracking-wide selection:bg-cyan-200 min-h-[120px]">
                                     {parsedContent.task2Answer ? (
-                                      renderHighlightedAnswer(parsedContent.task2Answer, selectedSubmission.feedback?.corrections ?? [])
+                                      renderHighlightedAnswer(
+                                        parsedContent.task2Answer,
+                                        selectedSubmission.feedback?.corrections ?? [],
+                                        activeCorrection,
+                                        setActiveCorrection,
+                                      )
                                     ) : (
                                       <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa làm Task 2...</span>
                                     )}
@@ -1128,6 +1157,49 @@ export default function TeacherDashboard() {
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Panel "Chi tiết phản hồi" — hiện chi tiết của correction đang được chọn (bấm vào đoạn tô vàng) */}
+                    {(selectedSubmission.feedback?.corrections?.length ?? 0) > 0 && (
+                      <div className="lg:sticky lg:top-6 rounded-3xl border border-slate-200 bg-white shadow-sm p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                        <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                          <Lightbulb className="h-4 w-4 text-amber-500" /> Chi tiết phản hồi
+                        </h3>
+
+                        {activeCorrection ? (
+                          <div className="space-y-4">
+                            <div className="flex items-start gap-2.5">
+                              <div className="bg-cyan-50 text-cyan-600 rounded-full p-1.5 shrink-0">
+                                <Lightbulb className="h-3.5 w-3.5" />
+                              </div>
+                              <p className="text-sm font-semibold text-slate-800 leading-relaxed">
+                                "{activeCorrection.original}"
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs font-bold text-slate-500 mb-1">Giải thích:</p>
+                              <p className="text-sm text-slate-600 leading-relaxed">{activeCorrection.explanation}</p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs font-bold text-slate-500 mb-2">Gợi ý:</p>
+                              <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-sm text-red-700 leading-relaxed line-through decoration-red-300/60">
+                                {activeCorrection.original}
+                              </div>
+                              <div className="flex justify-center py-1 text-slate-300">↓</div>
+                              <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-sm text-emerald-800 font-medium leading-relaxed">
+                                {activeCorrection.corrected}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic leading-relaxed">
+                            Bấm vào đoạn được tô vàng trong bài làm bên trái để xem chi tiết đề xuất sửa từ AI.
+                          </p>
+                        )}
+                      </div>
+                    )}
                     </div>
 
                     {/* Action Buttons */}
