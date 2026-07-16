@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import JSZip from "jszip";
 import {
   AlertTriangle,
   Bot,
@@ -24,7 +25,11 @@ import {
   ChevronDown,
   ChevronUp,
   LogOut,
-  Download // Đã import thêm icon Download
+  Download,
+  CheckSquare,
+  Square,
+  Archive,
+  X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { SubmissionRow, TestRow } from "@/lib/types";
@@ -88,7 +93,7 @@ type ExportSections = {
   teacherComment?: string;
 };
 
-// Dựng phần HTML cho Task 1 & Task 2 (đề bài + ảnh + bài làm) — dùng chung cho cả 2 kiểu export
+// Dựng phần HTML cho Task 1 & Task 2 (đề bài + ảnh + bài làm) — dùng chung cho mọi kiểu export
 function buildTaskSectionsHtml(sections: ExportSections) {
   let html = "";
 
@@ -124,8 +129,9 @@ function buildTaskSectionsHtml(sections: ExportSections) {
   return html;
 }
 
-// Nâng cấp: Export File DOC đầy đủ — đề bài, ảnh Task 1, bài làm từng Task, nhận xét giáo viên và Feedback AI nếu có
-function handleDownloadDoc(studentName: string, sections: ExportSections, feedback?: any) {
+// Dựng toàn bộ nội dung HTML (dạng .doc) cho MỘT bài làm — dùng chung cho nút
+// "Xuất File DOC" (tải lẻ) VÀ tính năng "Tải tất cả / Tải đã chọn" (zip)
+function buildFullDocHtml(studentName: string, sections: ExportSections, feedback?: any): string {
   const header =
     "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Times New Roman', serif; line-height: 1.6; color: #1e293b; } .feedback-box { background: #f0fdfa; border: 1px solid #ccfbf1; padding: 15px; border-radius: 8px; margin-top: 20px; } .correction { background: #fff; border: 1px solid #e2e8f0; padding: 10px; margin-bottom: 10px; border-radius: 4px; } .wrong { color: #ef4444; text-decoration: line-through; } .right { color: #10b981; font-weight: bold; } .reason { color: #64748b; font-size: 0.9em; }</style></head><body>";
   const footer = "</body></html>";
@@ -158,13 +164,27 @@ function handleDownloadDoc(studentName: string, sections: ExportSections, feedba
     sourceHTML += `</div>`;
   }
 
-  const source = "data:application/vnd.ms-word;charset=utf-8," + encodeURIComponent(header + sourceHTML + footer);
+  return header + sourceHTML + footer;
+}
+
+// Nâng cấp: Export File DOC đầy đủ — đề bài, ảnh Task 1, bài làm từng Task, nhận xét giáo viên và Feedback AI nếu có
+function handleDownloadDoc(studentName: string, sections: ExportSections, feedback?: any) {
+  const fullHtml = buildFullDocHtml(studentName, sections, feedback);
+  const source = "data:application/vnd.ms-word;charset=utf-8," + encodeURIComponent(fullHtml);
   const fileDownload = document.createElement("a");
   document.body.appendChild(fileDownload);
   fileDownload.href = source;
   fileDownload.download = `IELTS_Writing_${studentName.replace(/\s+/g, "_")}.doc`;
   fileDownload.click();
   document.body.removeChild(fileDownload);
+}
+
+/** Tránh trùng tên file khi nhiều học sinh trùng tên trong cùng 1 lượt tải zip */
+function makeUniqueFileName(base: string, used: Map<string, number>): string {
+  const safeBase = base.replace(/\s+/g, "_").replace(/[\\/:*?"<>|]/g, "");
+  const count = used.get(safeBase) ?? 0;
+  used.set(safeBase, count + 1);
+  return count === 0 ? `${safeBase}.doc` : `${safeBase}_${count + 1}.doc`;
 }
 
 export default function TeacherDashboard() {
@@ -189,6 +209,12 @@ export default function TeacherDashboard() {
     task2: false,
   }); // Trạng thái thu gọn / mở rộng từng Task
   const router = useRouter();
+
+  // ── State cho tính năng Chọn nhiều / Xóa hàng loạt / Tải tất cả ──
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
 
   // Hàm xử lý Export nhanh (icon Download cạnh tiêu đề) — cũng theo cấu trúc Task 1 / Task 2 giống UI
   const handleExportRawText = (studentName: string, sections: ExportSections) => {
@@ -459,6 +485,116 @@ export default function TeacherDashboard() {
     else void loadSubmissions();
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // Chọn nhiều / Xóa hàng loạt
+  // ─────────────────────────────────────────────────────────────
+  const toggleSelectionMode = () => {
+    setSelectionMode((prev) => !prev);
+    setSelectedIds(new Set()); // reset lựa chọn mỗi lần bật/tắt
+  };
+
+  const toggleSelectId = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (prev.size === submissions.length) return new Set();
+      return new Set(submissions.map((s) => s.id));
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (
+      !window.confirm(
+        `Xóa vĩnh viễn ${selectedIds.size} bài làm đã chọn? Hành động này không thể hoàn tác.`,
+      )
+    )
+      return;
+
+    setIsBulkDeleting(true);
+    setError(null);
+
+    const ids = Array.from(selectedIds);
+    const { error: deleteError } = await supabase.from("submissions").delete().in("id", ids);
+
+    setIsBulkDeleting(false);
+
+    if (deleteError) return setError(deleteError.message);
+
+    if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+    void loadSubmissions();
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Tải tất cả bài làm (zip) — nếu đang chọn nhiều thì chỉ zip các bài
+  // đã chọn, ngược lại zip toàn bộ danh sách hiện có. Mỗi file .doc bên
+  // trong zip có cấu trúc y hệt UI: đề bài + ảnh Task 1 + bài làm từng
+  // Task + nhận xét giáo viên + kết quả chấm AI (nếu có).
+  // ─────────────────────────────────────────────────────────────
+  const handleDownloadAll = async () => {
+    const targets =
+      selectionMode && selectedIds.size > 0
+        ? submissions.filter((s) => selectedIds.has(s.id))
+        : submissions;
+
+    const withContent = targets.filter((s) => s.content && s.content.trim().length > 0);
+
+    if (withContent.length === 0) {
+      setError("Không có bài làm nào có nội dung để tải.");
+      return;
+    }
+
+    setIsDownloadingAll(true);
+    setError(null);
+
+    try {
+      const zip = new JSZip();
+      const usedNames = new Map<string, number>();
+
+      for (const submission of withContent) {
+        const parsed = parseSubmissionContent(submission.content);
+        const html = buildFullDocHtml(
+          submission.student_name,
+          {
+            task1Prompt: submission.tests?.task1_prompt,
+            task1ImageUrl: submission.tests?.image_url,
+            task1Answer: parsed.task1Answer,
+            task2Prompt: submission.tests?.task2_prompt,
+            task2Answer: parsed.task2Answer,
+            teacherComment: (submission as any).teacher_comment ?? undefined,
+          },
+          submission.feedback,
+        );
+        const fileName = makeUniqueFileName(submission.student_name, usedNames);
+        zip.file(fileName, html);
+      }
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const stamp = new Date().toISOString().slice(0, 10);
+      link.download = `Bai_lam_IELTS_${stamp}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? `Lỗi khi tạo file zip: ${err.message}` : "Lỗi khi tạo file zip.");
+    } finally {
+      setIsDownloadingAll(false);
+    }
+  };
+
   if (!authChecked) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -540,6 +676,9 @@ export default function TeacherDashboard() {
           <div className="p-4 bg-red-50 text-red-900 rounded-2xl border border-red-200 flex items-center gap-3 shadow-sm animate-in fade-in slide-in-from-top-2">
             <div className="bg-red-100 p-2 rounded-full"><AlertTriangle className="h-5 w-5 text-red-600" /></div>
             <p className="font-medium text-sm">{error}</p>
+            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
@@ -547,13 +686,63 @@ export default function TeacherDashboard() {
           <section className="grid gap-6 lg:grid-cols-[380px_1fr] items-start">
             {/* Sidebar Danh sách */}
             <div className="rounded-3xl bg-white p-5 shadow-sm border border-slate-200/60 sticky top-6 max-h-[85vh] flex flex-col">
-              <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                   Bài làm <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">{submissions.length}</span>
                 </h2>
+                <button
+                  onClick={toggleSelectionMode}
+                  className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${selectionMode
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
+                    }`}
+                  title="Bật/tắt chế độ chọn nhiều bài"
+                >
+                  {selectionMode ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                  Chọn nhiều
+                </button>
               </div>
 
-              <div className="space-y-3 overflow-y-auto pr-2 pb-2 custom-scrollbar">
+              {/* Thanh công cụ: chọn tất cả + xóa hàng loạt + tải tất cả */}
+              <div className="flex items-center gap-2 py-3 border-b border-slate-100 mb-1">
+                {selectionMode && (
+                  <button
+                    onClick={toggleSelectAll}
+                    className="text-xs font-semibold text-cyan-700 hover:text-cyan-800 px-2 py-1"
+                  >
+                    {selectedIds.size === submissions.length && submissions.length > 0 ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+                  </button>
+                )}
+
+                <div className="ml-auto flex items-center gap-2">
+                  {selectionMode && selectedIds.size > 0 && (
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={isBulkDeleting}
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      {isBulkDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Xóa đã chọn ({selectedIds.size})
+                    </button>
+                  )}
+
+                  <button
+                    onClick={handleDownloadAll}
+                    disabled={isDownloadingAll || submissions.length === 0}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-cyan-200 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 transition-colors disabled:opacity-50"
+                    title={
+                      selectionMode && selectedIds.size > 0
+                        ? `Tải ${selectedIds.size} bài đã chọn dưới dạng .zip`
+                        : "Tải toàn bộ bài làm dưới dạng .zip"
+                    }
+                  >
+                    {isDownloadingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+                    Tải {selectionMode && selectedIds.size > 0 ? `(${selectedIds.size})` : "tất cả"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3 overflow-y-auto pr-2 pb-2 custom-scrollbar mt-3">
                 {submissions.length === 0 && (
                   <div className="text-center py-12 px-4 border-2 border-dashed border-slate-100 rounded-2xl">
                     <Clock className="mx-auto h-8 w-8 text-slate-300 mb-2" />
@@ -562,39 +751,61 @@ export default function TeacherDashboard() {
                 )}
 
                 {submissions.map((submission) => (
-                  <button
-                    key={submission.id}
-                    onClick={() => setSelectedId(submission.id)}
-                    className={`w-full text-left p-4 rounded-2xl border transition-all duration-200 group ${selectedSubmission?.id === submission.id
-                      ? "border-cyan-400 bg-cyan-50/50 ring-4 ring-cyan-50"
-                      : "border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-sm"
-                      }`}
-                  >
-                    <div className="flex justify-between items-start gap-2 mb-1.5">
-                      <span className="font-bold text-slate-900 group-hover:text-cyan-700 transition-colors">{submission.student_name}</span>
-                      {submission.status === "in_progress" && (
-                        <span className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
-                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" /> LIVE
+                  <div key={submission.id} className="relative">
+                    {selectionMode && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelectId(submission.id);
+                        }}
+                        className="absolute top-4 right-4 z-10 p-1 rounded-md bg-white shadow-sm border border-slate-200"
+                        title="Chọn bài này"
+                      >
+                        {selectedIds.has(submission.id) ? (
+                          <CheckSquare className="h-4 w-4 text-cyan-600" />
+                        ) : (
+                          <Square className="h-4 w-4 text-slate-400" />
+                        )}
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() =>
+                        selectionMode ? toggleSelectId(submission.id) : setSelectedId(submission.id)
+                      }
+                      className={`w-full text-left p-4 rounded-2xl border transition-all duration-200 group ${selectedSubmission?.id === submission.id && !selectionMode
+                        ? "border-cyan-400 bg-cyan-50/50 ring-4 ring-cyan-50"
+                        : selectionMode && selectedIds.has(submission.id)
+                          ? "border-cyan-300 bg-cyan-50/30"
+                          : "border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-sm"
+                        }`}
+                    >
+                      <div className="flex justify-between items-start gap-2 mb-1.5 pr-6">
+                        <span className="font-bold text-slate-900 group-hover:text-cyan-700 transition-colors">{submission.student_name}</span>
+                        {submission.status === "in_progress" && (
+                          <span className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" /> LIVE
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 line-clamp-1 font-medium mb-3">{submission.tests?.title ?? "Đề đã bị xóa"}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${statusStyles[submission.status] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                          {statusLabels[submission.status] || submission.status}
                         </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 line-clamp-1 font-medium mb-3">{submission.tests?.title ?? "Đề đã bị xóa"}</p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${statusStyles[submission.status] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
-                        {statusLabels[submission.status] || submission.status}
-                      </span>
-                      {submission.warning_count > 0 && (
-                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
-                          <ShieldAlert className="h-3 w-3" /> {submission.warning_count}/5
-                        </span>
-                      )}
-                      {submission.band_score != null && (
-                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-900 text-white border border-slate-900 shadow-sm flex items-center gap-1">
-                          <Sparkles className="h-3 w-3 text-cyan-400" /> Band {submission.band_score}
-                        </span>
-                      )}
-                    </div>
-                  </button>
+                        {submission.warning_count > 0 && (
+                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                            <ShieldAlert className="h-3 w-3" /> {submission.warning_count}/5
+                          </span>
+                        )}
+                        {submission.band_score != null && (
+                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-900 text-white border border-slate-900 shadow-sm flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 text-cyan-400" /> Band {submission.band_score}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
