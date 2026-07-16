@@ -22,6 +22,8 @@ import {
   Loader2,
   Sparkles,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   LogOut,
   Download,
   CheckSquare,
@@ -56,57 +58,32 @@ const GRADING_STEPS = [
   "Đối chiếu lại với các bài có band điểm tương tự",
 ];
 
-// ─────────────────────────────────────────────────────────────
-// Helper: dựng HTML (dạng .doc) cho MỘT bài làm — dùng chung cho
-// cả nút "Xuất File DOC" (tải lẻ) và tính năng "Tải tất cả" (zip)
-// ─────────────────────────────────────────────────────────────
-function buildSubmissionDocHtml(studentName: string, content: string, feedback?: any): string {
-  const header =
-    "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Times New Roman', serif; line-height: 1.6; color: #1e293b; } .feedback-box { background: #f0fdfa; border: 1px solid #ccfbf1; padding: 15px; border-radius: 8px; margin-top: 20px; } .correction { background: #fff; border: 1px solid #e2e8f0; padding: 10px; margin-bottom: 10px; border-radius: 4px; } .wrong { color: #ef4444; text-decoration: line-through; } .right { color: #10b981; font-weight: bold; } .reason { color: #64748b; font-size: 0.9em; }</style></head><body>";
-  const footer = "</body></html>";
+// Tách nội dung bài làm thô (chứa === THÔNG TIN HỌC SINH ===, === TASK 1 ===, === TASK 2 ===)
+// thành 2 phần: bài làm Task 1 và bài làm Task 2, bỏ hẳn khối thông tin học sinh khỏi hiển thị.
+function parseSubmissionContent(raw: string | null | undefined) {
+  const content = raw ?? "";
 
-  let sourceHTML = `<h2 style="text-align:center; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Bài làm của ${studentName}</h2>`;
-  sourceHTML += `<p style="white-space: pre-wrap; font-size: 11pt;">${content}</p>`;
-
-  if (feedback) {
-    sourceHTML += `<div class="feedback-box">`;
-    sourceHTML += `<h3 style="color: #0d9488; margin-top: 0;">Kết quả chấm AI - Overall Band: ${feedback.overall_band}</h3>`;
-    sourceHTML += `<p><strong>Nhận xét tổng quan:</strong> ${feedback.examiner_summary}</p>`;
-
-    if (feedback.corrections && feedback.corrections.length > 0) {
-      sourceHTML += `<h4 style="color: #0f172a;">Chi tiết sửa lỗi:</h4>`;
-      feedback.corrections.forEach((c: any) => {
-        sourceHTML += `<div class="correction">`;
-        sourceHTML += `<div class="wrong">❌ ${c.original}</div>`;
-        sourceHTML += `<div class="right">✅ ${c.corrected}</div>`;
-        sourceHTML += `<div class="reason">💡 Lời khuyên: ${c.explanation}</div>`;
-        sourceHTML += `</div>`;
-      });
+  const extract = (marker: string, nextMarkers: string[]) => {
+    const startIdx = content.indexOf(marker);
+    if (startIdx === -1) return "";
+    const afterMarker = startIdx + marker.length;
+    let endIdx = content.length;
+    for (const next of nextMarkers) {
+      const idx = content.indexOf(next, afterMarker);
+      if (idx !== -1 && idx < endIdx) endIdx = idx;
     }
-    sourceHTML += `</div>`;
+    return content.slice(afterMarker, endIdx).trim();
+  };
+
+  const task1Answer = extract("=== TASK 1 ===", ["=== TASK 2 ==="]);
+  const task2Answer = extract("=== TASK 2 ===", []);
+
+  // Fallback cho bài làm cũ không có marker: coi toàn bộ nội dung là Task 2
+  if (!task1Answer && !task2Answer && content.trim() && !content.includes("=== TASK")) {
+    return { task1Answer: "", task2Answer: content.trim() };
   }
 
-  return header + sourceHTML + footer;
-}
-
-// Nâng cấp: Export File DOC đính kèm luôn cả Feedback của AI nếu có
-function handleDownloadDoc(studentName: string, content: string, feedback?: any) {
-  const fullHtml = buildSubmissionDocHtml(studentName, content, feedback);
-  const source = "data:application/vnd.ms-word;charset=utf-8," + encodeURIComponent(fullHtml);
-  const fileDownload = document.createElement("a");
-  document.body.appendChild(fileDownload);
-  fileDownload.href = source;
-  fileDownload.download = `IELTS_Writing_${studentName.replace(/\s+/g, "_")}.doc`;
-  fileDownload.click();
-  document.body.removeChild(fileDownload);
-}
-
-/** Tránh trùng tên file khi nhiều học sinh trùng tên trong cùng 1 lượt tải zip */
-function makeUniqueFileName(base: string, used: Map<string, number>): string {
-  const safeBase = base.replace(/\s+/g, "_").replace(/[\\/:*?"<>|]/g, "");
-  const count = used.get(safeBase) ?? 0;
-  used.set(safeBase, count + 1);
-  return count === 0 ? `${safeBase}.doc` : `${safeBase}_${count + 1}.doc`;
+  return { task1Answer, task2Answer };
 }
 
 /** Đếm số từ đơn giản (tách theo khoảng trắng), dùng cho khối "Thống kê từ" */
@@ -123,7 +100,7 @@ type Correction = { original: string; corrected: string; explanation: string };
  * Tô sáng các đoạn bị AI sửa ngay trong bài làm gốc. Với mỗi correction, tìm vị trí
  * "original" xuất hiện trong text (khớp chính xác, fallback không phân biệt hoa/thường),
  * bỏ qua các correction không tìm thấy hoặc bị chồng lấn vị trí với correction trước đó.
- * Hover vào đoạn tô vàng sẽ hiện đề xuất sửa + giải thích, giống UI tham khảo.
+ * Hover vào đoạn tô vàng sẽ hiện đề xuất sửa + giải thích.
  */
 function renderHighlightedAnswer(text: string, corrections: Correction[]) {
   if (!text) return text;
@@ -179,6 +156,118 @@ function renderHighlightedAnswer(text: string, corrections: Correction[]) {
   return nodes;
 }
 
+// ---- Các hàm hỗ trợ xuất file DOC, đảm bảo nội dung file tải về khớp với UI trên web ----
+
+function escapeHtml(value?: string) {
+  return (value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+type ExportSections = {
+  task1Prompt?: string;
+  task1ImageUrl?: string | null;
+  task1Answer?: string;
+  task2Prompt?: string;
+  task2Answer?: string;
+  teacherComment?: string;
+};
+
+// Dựng phần HTML cho Task 1 & Task 2 (đề bài + ảnh + bài làm) — dùng chung cho mọi kiểu export
+function buildTaskSectionsHtml(sections: ExportSections) {
+  let html = "";
+
+  html += `<h3 style="color:#0f172a;border-left:4px solid #06b6d4;padding-left:10px;margin-top:24px;">TASK 1</h3>`;
+  if (sections.task1Prompt) {
+    html += `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px;">
+      <p style="margin:0 0 4px 0;font-size:10pt;font-weight:bold;color:#64748b;text-transform:uppercase;">Đề bài</p>
+      <p style="margin:0;white-space:pre-wrap;font-size:11pt;">${escapeHtml(sections.task1Prompt)}</p>
+    </div>`;
+  }
+  if (sections.task1ImageUrl) {
+    html += `<div style="text-align:center;margin-bottom:10px;">
+      <img src="${sections.task1ImageUrl}" style="max-width:500px;max-height:350px;border:1px solid #e2e8f0;border-radius:8px;" />
+    </div>`;
+  }
+  html += `<div style="margin-bottom:10px;">
+    <p style="margin:0 0 4px 0;font-size:10pt;font-weight:bold;color:#64748b;text-transform:uppercase;">Bài làm học sinh</p>
+    <p style="white-space:pre-wrap;font-size:11pt;line-height:1.8;">${sections.task1Answer ? escapeHtml(sections.task1Answer) : "<i>Học sinh chưa làm Task 1</i>"}</p>
+  </div>`;
+
+  html += `<h3 style="color:#0f172a;border-left:4px solid #06b6d4;padding-left:10px;margin-top:24px;">TASK 2</h3>`;
+  if (sections.task2Prompt) {
+    html += `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px;">
+      <p style="margin:0 0 4px 0;font-size:10pt;font-weight:bold;color:#64748b;text-transform:uppercase;">Đề bài</p>
+      <p style="margin:0;white-space:pre-wrap;font-size:11pt;">${escapeHtml(sections.task2Prompt)}</p>
+    </div>`;
+  }
+  html += `<div style="margin-bottom:10px;">
+    <p style="margin:0 0 4px 0;font-size:10pt;font-weight:bold;color:#64748b;text-transform:uppercase;">Bài làm học sinh</p>
+    <p style="white-space:pre-wrap;font-size:11pt;line-height:1.8;">${sections.task2Answer ? escapeHtml(sections.task2Answer) : "<i>Học sinh chưa làm Task 2</i>"}</p>
+  </div>`;
+
+  return html;
+}
+
+// Dựng toàn bộ nội dung HTML (dạng .doc) cho MỘT bài làm — dùng chung cho nút
+// "Xuất File DOC" (tải lẻ) VÀ tính năng "Tải tất cả / Tải đã chọn" (zip)
+function buildFullDocHtml(studentName: string, sections: ExportSections, feedback?: any): string {
+  const header =
+    "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Times New Roman', serif; line-height: 1.6; color: #1e293b; } .feedback-box { background: #f0fdfa; border: 1px solid #ccfbf1; padding: 15px; border-radius: 8px; margin-top: 20px; } .correction { background: #fff; border: 1px solid #e2e8f0; padding: 10px; margin-bottom: 10px; border-radius: 4px; } .wrong { color: #ef4444; text-decoration: line-through; } .right { color: #10b981; font-weight: bold; } .reason { color: #64748b; font-size: 0.9em; }</style></head><body>";
+  const footer = "</body></html>";
+
+  let sourceHTML = `<h2 style="text-align:center; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Bài làm của ${escapeHtml(studentName)}</h2>`;
+  sourceHTML += buildTaskSectionsHtml(sections);
+
+  if (sections.teacherComment && sections.teacherComment.trim()) {
+    sourceHTML += `<div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:15px;margin-top:24px;">
+      <h3 style="color:#059669;margin-top:0;">Nhận xét bổ sung của giáo viên</h3>
+      <p style="white-space:pre-wrap;font-size:11pt;">${escapeHtml(sections.teacherComment)}</p>
+    </div>`;
+  }
+
+  if (feedback) {
+    sourceHTML += `<div class="feedback-box">`;
+    sourceHTML += `<h3 style="color: #0d9488; margin-top: 0;">Kết quả chấm AI - Overall Band: ${feedback.overall_band}</h3>`;
+    sourceHTML += `<p><strong>Nhận xét tổng quan:</strong> ${feedback.examiner_summary}</p>`;
+
+    if (feedback.corrections && feedback.corrections.length > 0) {
+      sourceHTML += `<h4 style="color: #0f172a;">Chi tiết sửa lỗi:</h4>`;
+      feedback.corrections.forEach((c: any) => {
+        sourceHTML += `<div class="correction">`;
+        sourceHTML += `<div class="wrong">❌ ${c.original}</div>`;
+        sourceHTML += `<div class="right">✅ ${c.corrected}</div>`;
+        sourceHTML += `<div class="reason">💡 Lời khuyên: ${c.explanation}</div>`;
+        sourceHTML += `</div>`;
+      });
+    }
+    sourceHTML += `</div>`;
+  }
+
+  return header + sourceHTML + footer;
+}
+
+// Nâng cấp: Export File DOC đầy đủ — đề bài, ảnh Task 1, bài làm từng Task, nhận xét giáo viên và Feedback AI nếu có
+function handleDownloadDoc(studentName: string, sections: ExportSections, feedback?: any) {
+  const fullHtml = buildFullDocHtml(studentName, sections, feedback);
+  const source = "data:application/vnd.ms-word;charset=utf-8," + encodeURIComponent(fullHtml);
+  const fileDownload = document.createElement("a");
+  document.body.appendChild(fileDownload);
+  fileDownload.href = source;
+  fileDownload.download = `IELTS_Writing_${studentName.replace(/\s+/g, "_")}.doc`;
+  fileDownload.click();
+  document.body.removeChild(fileDownload);
+}
+
+/** Tránh trùng tên file khi nhiều học sinh trùng tên trong cùng 1 lượt tải zip */
+function makeUniqueFileName(base: string, used: Map<string, number>): string {
+  const safeBase = base.replace(/\s+/g, "_").replace(/[\\/:*?"<>|]/g, "");
+  const count = used.get(safeBase) ?? 0;
+  used.set(safeBase, count + 1);
+  return count === 0 ? `${safeBase}.doc` : `${safeBase}_${count + 1}.doc`;
+}
+
 export default function TeacherDashboard() {
   const [authChecked, setAuthChecked] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
@@ -194,6 +283,12 @@ export default function TeacherDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showExportToast, setShowExportToast] = useState(false); // State cho Toast Export Text
+  const [teacherCommentDraft, setTeacherCommentDraft] = useState(""); // Nội dung nhận xét đang soạn
+  const [isSavingComment, setIsSavingComment] = useState(false); // Trạng thái đang lưu nhận xét
+  const [expandedTasks, setExpandedTasks] = useState<{ task1: boolean; task2: boolean }>({
+    task1: false,
+    task2: false,
+  }); // Trạng thái thu gọn / mở rộng từng Task
   const router = useRouter();
 
   // ── State cho tính năng Chọn nhiều / Xóa hàng loạt / Tải tất cả ──
@@ -217,23 +312,19 @@ export default function TeacherDashboard() {
     return () => clearInterval(interval);
   }, [isGrading]);
 
-  // Hàm xử lý Export chỉ Text
-  const handleExportRawText = (studentName: string, content: string) => {
-    if (!content) return;
+  // Hàm xử lý Export nhanh (icon Download cạnh tiêu đề) — theo cấu trúc Task 1 / Task 2 giống UI
+  const handleExportRawText = (studentName: string, sections: ExportSections) => {
+    if (!sections.task1Answer && !sections.task2Answer) return;
 
-    // 1. Tạo cấu trúc HTML cho MS Word hiểu được
     const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export</title></head><body>";
     const footer = "</body></html>";
-    // Sử dụng white-space: pre-wrap để giữ nguyên xuống dòng của bài làm
-    const fullHtml = `${header}<p style="white-space: pre-wrap; font-family: 'Times New Roman'; font-size: 12pt;">${content}</p>${footer}`;
+    const bodyHtml = buildTaskSectionsHtml(sections);
+    const fullHtml = `${header}<h2 style="text-align:center; color:#0f172a;">Bài làm của ${escapeHtml(studentName)}</h2>${bodyHtml}${footer}`;
 
-    // 2. Chuyển Blob type thành application/msword
     const blob = new Blob([fullHtml], { type: "application/msword" });
     const url = URL.createObjectURL(blob);
-
     const link = document.createElement("a");
     link.href = url;
-    // 3. Đổi đuôi file thành .doc
     link.download = `${studentName.replace(/\s+/g, "_")}.doc`;
     document.body.appendChild(link);
     link.click();
@@ -254,6 +345,7 @@ export default function TeacherDashboard() {
   // Logic Auto Sign Out sau 30 phút (1,800,000 ms)
   useEffect(() => {
     if (!isAuthed) return;
+
     let timeoutId: NodeJS.Timeout;
 
     const resetTimer = () => {
@@ -267,6 +359,7 @@ export default function TeacherDashboard() {
     // Lắng nghe các hành động của người dùng
     window.addEventListener("mousemove", resetTimer);
     window.addEventListener("keydown", resetTimer);
+
     // Khởi tạo bộ đếm lần đầu
     resetTimer();
 
@@ -290,6 +383,19 @@ export default function TeacherDashboard() {
     [selectedId, submissions],
   );
 
+  // Đồng bộ nội dung nhận xét + thu gọn lại các Task mỗi khi chọn bài làm khác
+  useEffect(() => {
+    setTeacherCommentDraft((selectedSubmission as any)?.teacher_comment ?? "");
+    setExpandedTasks({ task1: false, task2: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubmission?.id]);
+
+  // Tách sẵn nội dung Task 1 / Task 2 từ bài làm thô
+  const parsedContent = useMemo(
+    () => parseSubmissionContent(selectedSubmission?.content),
+    [selectedSubmission?.content],
+  );
+
   const loadTests = async () => {
     try {
       const { data, error: testError } = await supabase.from("tests").select("*").order("created_at", { ascending: false });
@@ -304,7 +410,7 @@ export default function TeacherDashboard() {
     try {
       const { data, error: loadError } = await supabase
         .from("submissions")
-        .select("*, tests(title, task1_prompt, task2_prompt, duration_minutes)")
+        .select("*, tests(title, task1_prompt, task2_prompt, image_url, duration_minutes)")
         .order("created_at", { ascending: false });
       if (loadError) return setError(loadError.message);
       setSubmissions((data ?? []) as SubmissionRow[]);
@@ -315,6 +421,7 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     if (!isAuthed) return;
+
     const load = async () => {
       await Promise.all([loadSubmissions(), loadTests()]);
     };
@@ -349,7 +456,6 @@ export default function TeacherDashboard() {
       const { data: publicUrlData } = supabase.storage.from("test-images").getPublicUrl(filePath);
       setEditingTest({ ...editingTest, image_url: publicUrlData.publicUrl });
     }
-
     setIsUploading(false);
   };
 
@@ -378,7 +484,6 @@ export default function TeacherDashboard() {
     }
 
     setIsSavingTest(false);
-
     if (responseError) setError(responseError.message);
     else {
       setEditingTest(null);
@@ -435,6 +540,7 @@ export default function TeacherDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Chấm bài thất bại.");
       void loadSubmissions();
@@ -452,13 +558,27 @@ export default function TeacherDashboard() {
     setError(null);
 
     const { error: deleteError } = await supabase.from("submissions").delete().eq("id", submission.id);
-
     setIsDeleting(false);
 
     if (deleteError) return setError(deleteError.message);
-
     if (selectedId === submission.id) setSelectedId(null);
     void loadSubmissions();
+  };
+
+  // Lưu nhận xét bổ sung của giáo viên vào cột teacher_comment
+  const handleSaveComment = async () => {
+    if (!selectedSubmission) return;
+    setIsSavingComment(true);
+    setError(null);
+
+    const { error: updateError } = await supabase
+      .from("submissions")
+      .update({ teacher_comment: teacherCommentDraft })
+      .eq("id", selectedSubmission.id);
+
+    setIsSavingComment(false);
+    if (updateError) setError(updateError.message);
+    else void loadSubmissions();
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -511,8 +631,10 @@ export default function TeacherDashboard() {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // Tải tất cả bài làm (zip) — nếu đang có bài được chọn (selectionMode)
-  // thì chỉ zip các bài đó, ngược lại zip toàn bộ danh sách hiện có.
+  // Tải tất cả bài làm (zip) — nếu đang chọn nhiều thì chỉ zip các bài
+  // đã chọn, ngược lại zip toàn bộ danh sách hiện có. Mỗi file .doc bên
+  // trong zip có cấu trúc y hệt UI: đề bài + ảnh Task 1 + bài làm từng
+  // Task + nhận xét giáo viên + kết quả chấm AI (nếu có).
   // ─────────────────────────────────────────────────────────────
   const handleDownloadAll = async () => {
     const targets =
@@ -535,10 +657,18 @@ export default function TeacherDashboard() {
       const usedNames = new Map<string, number>();
 
       for (const submission of withContent) {
-        const html = buildSubmissionDocHtml(
+        const parsed = parseSubmissionContent(submission.content);
+        const html = buildFullDocHtml(
           submission.student_name,
-          submission.content ?? "",
-          (submission as any).feedback,
+          {
+            task1Prompt: submission.tests?.task1_prompt,
+            task1ImageUrl: submission.tests?.image_url,
+            task1Answer: parsed.task1Answer,
+            task2Prompt: submission.tests?.task2_prompt,
+            task2Answer: parsed.task2Answer,
+            teacherComment: (submission as any).teacher_comment ?? undefined,
+          },
+          submission.feedback,
         );
         const fileName = makeUniqueFileName(submission.student_name, usedNames);
         zip.file(fileName, html);
@@ -659,8 +789,8 @@ export default function TeacherDashboard() {
                 <button
                   onClick={toggleSelectionMode}
                   className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${selectionMode
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
                     }`}
                   title="Bật/tắt chế độ chọn nhiều bài"
                 >
@@ -669,7 +799,7 @@ export default function TeacherDashboard() {
                 </button>
               </div>
 
-              {/* Thanh công cụ: xóa hàng loạt + tải tất cả */}
+              {/* Thanh công cụ: chọn tất cả + xóa hàng loạt + tải tất cả */}
               <div className="flex items-center gap-2 py-3 border-b border-slate-100 mb-1">
                 {selectionMode && (
                   <button
@@ -740,10 +870,10 @@ export default function TeacherDashboard() {
                         selectionMode ? toggleSelectId(submission.id) : setSelectedId(submission.id)
                       }
                       className={`w-full text-left p-4 rounded-2xl border transition-all duration-200 group ${selectedSubmission?.id === submission.id && !selectionMode
-                          ? "border-cyan-400 bg-cyan-50/50 ring-4 ring-cyan-50"
-                          : selectionMode && selectedIds.has(submission.id)
-                            ? "border-cyan-300 bg-cyan-50/30"
-                            : "border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-sm"
+                        ? "border-cyan-400 bg-cyan-50/50 ring-4 ring-cyan-50"
+                        : selectionMode && selectedIds.has(submission.id)
+                          ? "border-cyan-300 bg-cyan-50/30"
+                          : "border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-sm"
                         }`}
                     >
                       <div className="flex justify-between items-start gap-2 mb-1.5 pr-6">
@@ -822,9 +952,17 @@ export default function TeacherDashboard() {
                           {selectedSubmission.content && (
                             <div className="relative flex items-center">
                               <button
-                                onClick={() => handleExportRawText(selectedSubmission.student_name, selectedSubmission.content ?? "")}
+                                onClick={() =>
+                                  handleExportRawText(selectedSubmission.student_name, {
+                                    task1Prompt: selectedSubmission.tests?.task1_prompt,
+                                    task1ImageUrl: selectedSubmission.tests?.image_url,
+                                    task1Answer: parsedContent.task1Answer,
+                                    task2Prompt: selectedSubmission.tests?.task2_prompt,
+                                    task2Answer: parsedContent.task2Answer,
+                                  })
+                                }
                                 className="group p-1.5 rounded-lg text-slate-400 hover:bg-cyan-50 hover:text-cyan-600 hover:shadow-sm border border-transparent hover:border-cyan-200 transition-all"
-                                title="Xuất bài làm (Chỉ văn bản)"
+                                title="Xuất bài làm (Đề bài + Task 1/2)"
                               >
                                 <Download className="h-4 w-4" />
                               </button>
@@ -847,19 +985,149 @@ export default function TeacherDashboard() {
                       </div>
 
                       {/* Gợi ý cách xem lỗi tô sáng — chỉ hiện khi đã có kết quả chấm */}
-                     {(selectedSubmission.feedback?.corrections?.length ?? 0) > 0 && (
+                      {(selectedSubmission.feedback?.corrections?.length ?? 0) > 0 && (
                         <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 w-fit">
                           <span className="inline-block h-3 w-3 rounded-sm bg-amber-200/70 border border-amber-400" />
                           Di chuột vào phần được tô vàng để xem đề xuất sửa từ AI
                         </div>
                       )}
 
-                      {/* Giao diện Đọc bài được nâng cấp — có tô sáng lỗi nếu đã chấm điểm */}
-                      <div className="whitespace-pre-wrap font-serif text-[16px] leading-[2.2] bg-[#fcfcfc] border border-slate-300 rounded-xl px-8 py-8 shadow-inner min-h-[300px] text-slate-800 tracking-wide selection:bg-cyan-200">
-                        {selectedSubmission.content?.trim()
-                          ? renderHighlightedAnswer(selectedSubmission.content, selectedSubmission.feedback?.corrections ?? [])
-                          : <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa nhập nội dung nào...</span>}
-                      </div>
+                      {/* Giao diện hiển thị bài làm theo từng Task — mặc định thu gọn, bấm để xem đầy đủ.
+                          Bài làm có tô sáng lỗi (nếu đã chấm điểm) ngay trong phần "Bài làm học sinh". */}
+                      {!selectedSubmission.content?.trim() ? (
+                        <div className="flex items-center justify-center min-h-[200px] bg-[#fcfcfc] border border-slate-300 rounded-xl">
+                          <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa nhập nội dung nào...</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {/* TASK 1 */}
+                          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedTasks((prev) => ({ ...prev, task1: !prev.task1 }))}
+                              className="w-full flex items-center justify-between gap-2 bg-slate-900 text-white px-5 py-3 hover:bg-slate-800 transition-colors"
+                            >
+                              <span className="flex items-center gap-2 font-black tracking-wide text-sm">
+                                <ImageIcon className="h-4 w-4 text-cyan-400" /> TASK 1
+                              </span>
+                              <span className="flex items-center gap-1 text-xs font-bold text-cyan-300">
+                                {expandedTasks.task1 ? (
+                                  <>Thu gọn <ChevronUp className="h-3.5 w-3.5" /></>
+                                ) : (
+                                  <>Xem đầy đủ <ChevronDown className="h-3.5 w-3.5" /></>
+                                )}
+                              </span>
+                            </button>
+
+                            {expandedTasks.task1 ? (
+                              <div className="p-5 space-y-4">
+                                {selectedSubmission.tests?.task1_prompt && (
+                                  <div className="rounded-xl bg-slate-50 border border-slate-200 border-l-4 border-l-cyan-400 p-4">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Đề bài</p>
+                                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                      {selectedSubmission.tests.task1_prompt}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {selectedSubmission.tests?.image_url && (
+                                  <div className="flex justify-center bg-white border border-slate-200 rounded-xl p-3">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={selectedSubmission.tests.image_url}
+                                      alt="Minh họa đề Task 1"
+                                      className="max-h-[360px] object-contain rounded-lg"
+                                    />
+                                  </div>
+                                )}
+
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Bài làm học sinh</p>
+                                  <div className="whitespace-pre-wrap font-serif text-[15px] leading-[2] bg-[#fcfcfc] border border-slate-200 rounded-xl px-6 py-6 text-slate-800 tracking-wide selection:bg-cyan-200 min-h-[120px]">
+                                    {parsedContent.task1Answer ? (
+                                      renderHighlightedAnswer(parsedContent.task1Answer, selectedSubmission.feedback?.corrections ?? [])
+                                    ) : (
+                                      <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa làm Task 1...</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedTasks((prev) => ({ ...prev, task1: true }))}
+                                className="w-full text-left p-4 hover:bg-slate-50 transition-colors"
+                              >
+                                <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">
+                                  {parsedContent.task1Answer || (
+                                    <span className="italic text-slate-400">Học sinh chưa làm Task 1...</span>
+                                  )}
+                                </p>
+                                <p className="mt-2 text-[11px] font-bold text-cyan-600">
+                                  Bấm để xem đề bài{selectedSubmission.tests?.image_url ? ", ảnh minh họa" : ""} và toàn bộ bài làm →
+                                </p>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* TASK 2 */}
+                          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedTasks((prev) => ({ ...prev, task2: !prev.task2 }))}
+                              className="w-full flex items-center justify-between gap-2 bg-slate-900 text-white px-5 py-3 hover:bg-slate-800 transition-colors"
+                            >
+                              <span className="flex items-center gap-2 font-black tracking-wide text-sm">
+                                <BookOpen className="h-4 w-4 text-cyan-400" /> TASK 2
+                              </span>
+                              <span className="flex items-center gap-1 text-xs font-bold text-cyan-300">
+                                {expandedTasks.task2 ? (
+                                  <>Thu gọn <ChevronUp className="h-3.5 w-3.5" /></>
+                                ) : (
+                                  <>Xem đầy đủ <ChevronDown className="h-3.5 w-3.5" /></>
+                                )}
+                              </span>
+                            </button>
+
+                            {expandedTasks.task2 ? (
+                              <div className="p-5 space-y-4">
+                                {selectedSubmission.tests?.task2_prompt && (
+                                  <div className="rounded-xl bg-slate-50 border border-slate-200 border-l-4 border-l-cyan-400 p-4">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Đề bài</p>
+                                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                      {selectedSubmission.tests.task2_prompt}
+                                    </p>
+                                  </div>
+                                )}
+
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Bài làm học sinh</p>
+                                  <div className="whitespace-pre-wrap font-serif text-[15px] leading-[2] bg-[#fcfcfc] border border-slate-200 rounded-xl px-6 py-6 text-slate-800 tracking-wide selection:bg-cyan-200 min-h-[120px]">
+                                    {parsedContent.task2Answer ? (
+                                      renderHighlightedAnswer(parsedContent.task2Answer, selectedSubmission.feedback?.corrections ?? [])
+                                    ) : (
+                                      <span className="text-slate-400 italic font-sans text-sm">Học sinh chưa làm Task 2...</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedTasks((prev) => ({ ...prev, task2: true }))}
+                                className="w-full text-left p-4 hover:bg-slate-50 transition-colors"
+                              >
+                                <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">
+                                  {parsedContent.task2Answer || (
+                                    <span className="italic text-slate-400">Học sinh chưa làm Task 2...</span>
+                                  )}
+                                </p>
+                                <p className="mt-2 text-[11px] font-bold text-cyan-600">Bấm để xem đề bài và toàn bộ bài làm →</p>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Action Buttons */}
@@ -895,7 +1163,18 @@ export default function TeacherDashboard() {
 
                       <button
                         onClick={() =>
-                          handleDownloadDoc(selectedSubmission.student_name, selectedSubmission.content ?? "", selectedSubmission.feedback)
+                          handleDownloadDoc(
+                            selectedSubmission.student_name,
+                            {
+                              task1Prompt: selectedSubmission.tests?.task1_prompt,
+                              task1ImageUrl: selectedSubmission.tests?.image_url,
+                              task1Answer: parsedContent.task1Answer,
+                              task2Prompt: selectedSubmission.tests?.task2_prompt,
+                              task2Answer: parsedContent.task2Answer,
+                              teacherComment: teacherCommentDraft,
+                            },
+                            selectedSubmission.feedback,
+                          )
                         }
                         disabled={!selectedSubmission.content}
                         className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 hover:text-cyan-700 hover:border-cyan-200 disabled:opacity-50"
@@ -918,6 +1197,30 @@ export default function TeacherDashboard() {
                       )}
                     </div>
 
+                    {/* Nhận xét bổ sung của giáo viên */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                      <label className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <FileCheck2 className="h-4 w-4 text-slate-500" /> Nhận xét bổ sung của giáo viên
+                      </label>
+                      <textarea
+                        rows={4}
+                        className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition-all resize-none shadow-sm"
+                        placeholder="Viết nhận xét cho học sinh..."
+                        value={teacherCommentDraft}
+                        onChange={(e) => setTeacherCommentDraft(e.target.value)}
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          onClick={handleSaveComment}
+                          disabled={isSavingComment}
+                          className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-500 shadow-sm transition disabled:opacity-50"
+                        >
+                          {isSavingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                          Gửi nhận xét
+                        </button>
+                      </div>
+                    </div>
+
                     {/* AI Feedback UI Premium */}
                     {selectedSubmission.feedback && (
                       <div className="mt-8 rounded-3xl border border-cyan-200/60 bg-gradient-to-br from-cyan-50/80 to-white overflow-hidden shadow-sm">
@@ -938,18 +1241,18 @@ export default function TeacherDashboard() {
                         </div>
 
                         <div className="p-6 space-y-8">
-                          {/* Thống kê từ — giống khối "Thống kê từ" ở bản tham khảo */}
+                          {/* Thống kê từ */}
                           <div className="flex flex-wrap gap-3">
                             <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm px-4 py-3 flex items-center gap-3">
                               <div className="bg-slate-100 p-2 rounded-xl"><Type className="h-4 w-4 text-slate-500" /></div>
                               <div>
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Số từ bài làm</p>
                                 <p className="text-lg font-black text-slate-900">
-                                  {countWords(selectedSubmission.content)} <span className="text-xs font-medium text-slate-400">từ</span>
+                                  {countWords(parsedContent.task1Answer) + countWords(parsedContent.task2Answer)} <span className="text-xs font-medium text-slate-400">từ</span>
                                 </p>
                               </div>
                             </div>
-                            {selectedSubmission.feedback.corrections?.length > 0 && (
+                            {(selectedSubmission.feedback.corrections?.length ?? 0) > 0 && (
                               <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm px-4 py-3 flex items-center gap-3">
                                 <div className="bg-amber-100 p-2 rounded-xl"><AlertTriangle className="h-4 w-4 text-amber-600" /></div>
                                 <div>
