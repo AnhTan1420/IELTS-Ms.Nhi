@@ -163,7 +163,7 @@ function renderHighlightedAnswer(
         type="button"
         onClick={() => onSelect(m.correction)}
         title="Bấm để xem chi tiết đề xuất sửa"
-        className={`inline whitespace-normal border-0 appearance-none p-0 m-0 [font:inherit] text-inherit align-baseline rounded-sm px-0.5 cursor-pointer underline decoration-2 underline-offset-2 transition-colors ${
+        className={`inline whitespace-normal text-left border-0 appearance-none p-0 m-0 [font:inherit] text-inherit align-baseline rounded-sm px-0.5 cursor-pointer underline decoration-2 underline-offset-2 transition-colors ${
           isActive
             ? "bg-cyan-300/80 decoration-cyan-600 ring-2 ring-cyan-500"
             : "bg-amber-200/70 decoration-amber-500 hover:bg-amber-300/80"
@@ -289,7 +289,7 @@ function buildFullDocHtml(studentName: string, sections: ExportSections, feedbac
 
   if (feedback) {
     sourceHTML += `<div class="feedback-box">`;
-    sourceHTML += `<h3 style="color: #0d9488; margin-top: 0;">Kết quả chấm - Overall Band: ${feedback.overall_band}</h3>`;
+    sourceHTML += `<h3 style="color: #0d9488; margin-top: 0;">Kết quả chấm AI - Overall Band: ${feedback.overall_band}</h3>`;
     sourceHTML += `<p><strong>Nhận xét tổng quan:</strong> ${feedback.examiner_summary}</p>`;
 
     if (feedback.corrections && feedback.corrections.length > 0) {
