@@ -293,7 +293,7 @@ async function gradeWithGemini(
 export async function gradeSubmission(
   content: string,
   testPrompt: string,
-  taskType: TaskType = "task2",
+  taskType: TaskType,
 ): Promise<GradingFeedback> {
   try {
     return await gradeWithGemini(content, testPrompt, taskType);
