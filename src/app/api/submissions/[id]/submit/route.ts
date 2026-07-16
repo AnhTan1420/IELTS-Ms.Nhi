@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { gradeSubmission } from "@/lib/grading";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: submission, error: fetchError } = await supabaseAdmin
     .from("submissions")
-    .select("status, test_id, tests(task1_prompt, task2_prompt)")
+    .select("status, test_id")
     .eq("id", id)
     .single();
 
@@ -43,23 +42,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  // Kick off AI grading automatically. We await it so the student sees a final
-  // status, but failures here should never block the (already saved) submission.
-  const test = submission.tests as unknown as { task1_prompt: string; task2_prompt: string } | null;
-  const testPrompt = [test?.task1_prompt, test?.task2_prompt].filter(Boolean).join("\n\n");
-
-  try {
-    if (content.trim() && testPrompt.trim()) {
-      const feedback = await gradeSubmission(content, testPrompt);
-      await supabaseAdmin
-        .from("submissions")
-        .update({ feedback, band_score: feedback.overall_band })
-        .eq("id", id);
-    }
-  } catch (gradeError) {
-    console.error("Auto-grading after submit failed:", gradeError);
-    // The teacher can still re-trigger grading manually from the dashboard.
-  }
+  // ⚠️ KHÔNG AUTO-GRADE Ở ĐÂY: bài làm chỉ được đánh dấu "completed" (đã nộp).
+  // Điểm số (band_score) và feedback CHỈ được tạo khi giáo viên chủ động bấm nút
+  // chấm điểm trên TeacherDashboard (gọi tới /api/grade). Route này TUYỆT ĐỐI
+  // không được gọi gradeSubmission()/update feedback — nếu cần khôi phục auto-grade
+  // trong tương lai, hãy trao đổi rõ với giáo viên trước vì đây là điểm chặn có chủ đích.
 
   return NextResponse.json({ ok: true, status: "completed" });
 }
