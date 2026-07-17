@@ -10,22 +10,28 @@ type TaskType = "task1" | "task2";
 
 const TASK_CONFIG = {
   task1: {
-    label:          "Task 1 (Academic/GT)",
-    primaryFocus:   "Task Achievement (TA) và Coherence & Cohesion (CC)",
+    label: "Task 1 (Academic/GT)",
+    primaryFocus: "Task Achievement (TA) và Coherence & Cohesion (CC)",
+    criterionKey: "TA" as const,
     criterionLabel: "Task Achievement",
+    minWords: 150,
     promptAnalysis: `## PHÂN TÍCH ĐỀ (TA Pre-check)
-Nêu ngắn gọn: xu hướng/mục đích chính (bắt buộc có trong overview), các đặc điểm nổi bật cần so sánh, số liệu quan trọng không được bỏ sót.`,
+- Xác định đây là Academic Task 1 (report mô tả biểu đồ/bảng/quy trình/bản đồ) hay GT Task 1 (letter — nêu rõ mục đích thư: khiếu nại/xin việc/hỏi thông tin...).
+- Nêu ngắn gọn: xu hướng/mục đích chính (bắt buộc có trong overview hoặc phần mở đầu thư).
+- Các đặc điểm nổi bật cần so sánh/đề cập, số liệu hoặc yêu cầu (bullet points nếu là GT) không được bỏ sót.`,
     currentBandNote:
-      "Overview có nêu rõ xu hướng chính không? Các đặc điểm nổi bật đã được chọn lọc & so sánh, hay chỉ liệt kê số liệu?",
+      "Overview/đoạn mở có nêu rõ xu hướng chính hoặc mục đích thư không? Các đặc điểm nổi bật đã được chọn lọc & so sánh (không phải chỉ liệt kê số liệu), hoặc với GT: đủ 3 bullet points, đúng tone (formal/informal/semi-formal)?",
   },
   task2: {
-    label:          "Task 2 (Academic/GT)",
-    primaryFocus:   "Task Response (TR) và Coherence & Cohesion (CC)",
+    label: "Task 2 (Academic/GT)",
+    primaryFocus: "Task Response (TR) và Coherence & Cohesion (CC)",
+    criterionKey: "TR" as const,
     criterionLabel: "Task Response",
+    minWords: 250,
     promptAnalysis: `## PHÂN TÍCH ĐỀ (TR Pre-check)
-Nêu ngắn gọn: chủ đề chính, các phần của câu hỏi cần giải quyết (2 quan điểm/nguyên nhân-giải pháp...), lập trường cá nhân được yêu cầu.`,
+Nêu ngắn gọn: chủ đề chính, các phần của câu hỏi cần giải quyết (2 quan điểm/nguyên nhân-giải pháp/đồng ý-không đồng ý...), lập trường cá nhân được yêu cầu.`,
     currentBandNote:
-      "Bài đã giải quyết đủ TẤT CẢ các phần câu hỏi chưa? Lập trường có rõ ràng, nhất quán không? Ý tưởng có được mở rộng bằng ví dụ cụ thể hay chỉ khẳng định suông?",
+      "Bài đã giải quyết đủ TẤT CẢ các phần câu hỏi chưa? Lập trường có rõ ràng, nhất quán xuyên suốt không? Ý tưởng có được mở rộng bằng ví dụ/giải thích cụ thể hay chỉ khẳng định suông?",
   },
 } as const;
 
@@ -36,51 +42,55 @@ function buildSystemPrompt(taskType: TaskType): string {
 
 QUY TẮC CHÍNH:
 1. ${t.currentBandNote}
-2. Chỉ sửa lỗi thật (ngữ pháp, chính tả, thì, hòa hợp chủ-vị, collocation sai, thiếu trợ động từ bị động, sai từ loại, mạo từ). KHÔNG viết lại câu chỉ vì lý do văn phong nếu câu gốc đã đúng ngữ pháp và tự nhiên.
-3. Mọi "explanation" trong corrections PHẢI bằng TIẾNG VIỆT, nêu rõ TÊN quy tắc ngữ pháp bị vi phạm — cấm các câu chung chung như "sửa cho đúng ngữ pháp" hay "dùng từ X cho tự nhiên hơn" mà không giải thích.
+2. Đếm số từ thực tế của bài. Bài yêu cầu tối thiểu ${t.minWords} từ. Nếu thiếu, PHẢI nêu rõ trong "examiner_summary" và áp dụng mức trừ điểm ${t.criterionLabel}/CC theo band descriptor thật (không bỏ qua lỗi này).
+3. Chỉ sửa lỗi thật (ngữ pháp, chính tả, thì, hòa hợp chủ-vị, collocation sai, thiếu trợ động từ bị động, sai từ loại, mạo từ). KHÔNG viết lại câu chỉ vì lý do văn phong nếu câu gốc đã đúng ngữ pháp và tự nhiên.
+4. Mọi giải thích PHẢI bằng TIẾNG VIỆT, nêu rõ TÊN quy tắc ngữ pháp bị vi phạm — cấm câu chung chung như "sửa cho đúng ngữ pháp" mà không giải thích.
    Ví dụ chuẩn:
    - "Lỗi hòa hợp chủ-vị: chủ ngữ số nhiều 'poverty and hunger' cần động từ số nhiều 'remain', không phải 'remains'."
    - "Lỗi thừa định từ (double determiners): không đặt 'our' và 'today's' liền nhau trước danh từ. Sửa: 'today's world' hoặc 'our world today'."
-4. Band số nguyên cho từng tiêu chí (TA/TR, CC, LR, GRA). Band tổng = trung bình 4 tiêu chí, làm tròn đến 0.5 gần nhất (VD: 6.75→7.0; 6.5 giữ nguyên 6.5).
-5. Trích dẫn cụm từ/câu cụ thể trong bài để minh chứng nhận xét — không nhận xét chung chung.
-6. Chỉ đưa lộ trình lên Band 8.0/9.0 nếu điểm hiện tại đã ≥7.0. Ngược lại chỉ nhắm band kế tiếp.
-7. Toàn bộ nhận xét/JSON string values viết bằng TIẾNG VIỆT, trừ phần trích dẫn bài viết gốc và "original"/"corrected" (giữ tiếng Anh).
+5. TUYỆT ĐỐI KHÔNG bịa câu trích dẫn. Mọi câu trong "original" và trong phần trích dẫn phải là NGUYÊN VĂN xuất hiện trong bài học sinh. Nếu không tìm được ví dụ phù hợp cho một mục, bỏ qua mục đó thay vì tự viết câu giả định.
+6. Band số nguyên/nửa điểm (1.0–9.0, bước 0.5) cho từng tiêu chí (${t.criterionLabel}/${t.criterionKey}, CC, LR, GRA).
+7. Overall Band = trung bình cộng 4 tiêu chí, làm tròn theo quy tắc IELTS thật: phần thập phân .25 → làm tròn lên .5; phần thập phân .75 → làm tròn lên nguyên tiếp theo; .0 và .5 giữ nguyên. (VD: trung bình 6.75 → overall 7.0; trung bình 6.25 → overall 6.5; trung bình 6.5 → giữ 6.5).
+8. Chỉ đưa lộ trình lên Band 8.0/9.0 nếu điểm hiện tại đã ≥7.0. Ngược lại chỉ nhắm band kế tiếp (+0.5).
+9. Với mỗi mục trong "corrections", gắn đúng 1 giá trị "criterion" thuộc {"CC","GRA","LR","${t.criterionKey}"} cho biết lỗi này ảnh hưởng chủ yếu tiêu chí nào.
+10. Bảng từ vựng chỉ liệt kê từ/cụm từ THỰC SỰ xuất hiện trong bài học sinh và có vấn đề rõ ràng (sai collocation, lặp từ, quá cơ bản so với band mục tiêu) — không liệt kê tràn lan từ không có vấn đề.
+11. Đề xuất 3-5 cấu trúc ngữ pháp/diễn đạt nâng cao phù hợp CHỦ ĐỀ CỤ THỂ của bài luận (không dùng ví dụ chung chung có sẵn), kèm câu ví dụ tiếng Anh áp dụng đúng chủ đề + giải nghĩa tiếng Việt.
+12. TOÀN BỘ phản hồi của bạn CHỈ LÀ MỘT JSON OBJECT DUY NHẤT, không có bất kỳ text nào trước hoặc sau, không dùng markdown code fence (không có \`\`\`json). Các trường dạng markdown bên trong JSON (edited_essay_markdown, vocabulary/table nếu có) được phép chứa cú pháp markdown như một CHUỖI, nhưng bản thân response tổng thể phải là JSON hợp lệ, parse được ngay bằng JSON.parse().
+13. Escape đúng mọi dấu " và ký tự xuống dòng bên trong các giá trị string (dùng \\n hợp lệ trong JSON, không dùng xuống dòng thật chưa escape).
 
-CẤU TRÚC OUTPUT (theo đúng thứ tự, đúng tiêu đề):
-
-${t.promptAnalysis}
-
-## ĐIỂM SỐ CHI TIẾT
-- Overall Band: X.X
-- ${t.criterionLabel}: X.X | CC: X.X | LR: X.X | GRA: X.X
-
-## PHÂN TÍCH TIẾN TRÌNH BAND
-### Band hiện tại [X.X] — vì sao
-Trích câu tiếng Anh cụ thể + giải thích tiếng Việt.
-### Vì sao không bị hạ xuống [X.X-0.5]
-Nêu ít nhất 1 điểm mạnh thực tế.
-### Vì sao chưa đạt [X.X+0.5]
-Nêu lỗi/thiếu sót cụ thể, trích câu lỗi.
-### Lộ trình lên [X.X+0.5]
-2-3 bước hành động cụ thể, đối chiếu trực tiếp câu/đoạn trong bài.
-
-## BÀI VIẾT ĐÃ CHỈNH SỬA
-Trích các câu có lỗi, sửa lại, **in đậm** phần sửa. Không viết lại toàn bài.
-
-## TỪ VỰNG & CẤU TRÚC GỢI Ý
-| Từ gốc | Thay thế tốt hơn | Lý do (tiếng Việt) |
-|---|---|---|
-Gợi ý thêm 1-5 cấu trúc nâng cao phù hợp chủ đề bài, kèm câu ví dụ tiếng Anh + giải nghĩa tiếng Việt.
-
-─────────
-Sau phần trên, xuất 1 JSON object hợp lệ, KHÔNG markdown fence, KHÔNG lời dẫn, đúng schema:
+SCHEMA CHÍNH XÁC (điền đầy đủ mọi trường, không bỏ trống trừ khi có ghi chú null được phép):
 
 {
+  "word_count": number,
+  "meets_min_word_count": boolean,
   "overall_band": number,
   "examiner_summary": string,
-  "task1": {"band": number, "TA": number, "CC": number, "LR": number, "GRA": number} | null,
-  "task2": {"band": number, "TR": number, "CC": number, "LR": number, "GRA": number} | null,
-  "corrections": [{"original": string, "corrected": string, "explanation": string}]
+  "prompt_analysis": string,
+  "task1": ${taskType === "task1" ? `{"band": number, "TA": number, "CC": number, "LR": number, "GRA": number}` : "null"},
+  "task2": ${taskType === "task2" ? `{"band": number, "TR": number, "CC": number, "LR": number, "GRA": number}` : "null"},
+  "band_progression": {
+    "current_band": number,
+    "why_current": string,
+    "why_not_lower": string,
+    "why_not_higher": string,
+    "roadmap_steps": string[]
+  },
+  "corrections": [
+    {
+      "original": string,
+      "corrected": string,
+      "explanation": string,
+      "criterion": "CC" | "GRA" | "LR" | "${t.criterionKey}"
+    }
+  ],
+  "edited_essay_markdown": string,
+  "vocabulary_suggestions": [
+    { "original_word": string, "better_alternative": string, "reason": string }
+  ],
+  "advanced_structures": [
+    { "structure_name": string, "example_sentence_en": string, "explanation_vi": string }
+  ],
+  "golden_rule": string
 }`;
 }
 
@@ -88,12 +98,11 @@ Sau phần trên, xuất 1 JSON object hợp lệ, KHÔNG markdown fence, KHÔNG
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
+/** JSON không parse được sau mọi nỗ lực sửa — coi là lỗi "đáng thử model khác", không phải lỗi hệ thống */
+class JsonExtractionError extends Error {}
+
 function toHalfBand(x: number): number {
   return Math.round(Math.min(Math.max(x, 1), 9) * 2) / 2;
-}
-
-function toInteger(x: number): number {
-  return Math.round(Math.min(Math.max(x, 1), 9));
 }
 
 /**
@@ -109,13 +118,13 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
     raw.task1 = null;
   }
 
-  // 2. CHUẨN HOÁ TASK 1
+  // 2. CHUẨN HOÁ TASK 1 (giữ half-band 0.5, không ép về số nguyên)
   if (raw.task1) {
     const taScore = raw.task1.TA ?? (raw.task1 as any).TR ?? 1;
-    raw.task1.TA  = toInteger(taScore);
-    raw.task1.CC  = toInteger(raw.task1.CC ?? 1);
-    raw.task1.LR  = toInteger(raw.task1.LR ?? 1);
-    raw.task1.GRA = toInteger(raw.task1.GRA ?? 1);
+    raw.task1.TA = toHalfBand(taScore);
+    raw.task1.CC = toHalfBand(raw.task1.CC ?? 1);
+    raw.task1.LR = toHalfBand(raw.task1.LR ?? 1);
+    raw.task1.GRA = toHalfBand(raw.task1.GRA ?? 1);
 
     const mean = (raw.task1.TA + raw.task1.CC + raw.task1.LR + raw.task1.GRA) / 4;
     raw.task1.band = toHalfBand(mean);
@@ -124,16 +133,18 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
   // 3. CHUẨN HOÁ TASK 2
   if (raw.task2) {
     const trScore = raw.task2.TR ?? (raw.task2 as any).TA ?? 1;
-    raw.task2.TR  = toInteger(trScore);
-    raw.task2.CC  = toInteger(raw.task2.CC ?? 1);
-    raw.task2.LR  = toInteger(raw.task2.LR ?? 1);
-    raw.task2.GRA = toInteger(raw.task2.GRA ?? 1);
+    raw.task2.TR = toHalfBand(trScore);
+    raw.task2.CC = toHalfBand(raw.task2.CC ?? 1);
+    raw.task2.LR = toHalfBand(raw.task2.LR ?? 1);
+    raw.task2.GRA = toHalfBand(raw.task2.GRA ?? 1);
 
     const mean = (raw.task2.TR + raw.task2.CC + raw.task2.LR + raw.task2.GRA) / 4;
     raw.task2.band = toHalfBand(mean);
   }
 
   // 4. TÍNH TOÁN LẠI OVERALL BAND
+  // (nhánh task1 && task2 hiện chưa xảy ra vì bước 1 luôn ép về đúng 1 object theo taskType đang chấm;
+  //  giữ lại để tương thích nếu sau này hỗ trợ chấm gộp cả 2 task trong 1 lần gọi)
   if (raw.task1 && raw.task2) {
     raw.overall_band = toHalfBand((raw.task1.band + raw.task2.band * 2) / 3);
   } else if (raw.task1) {
@@ -145,9 +156,9 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
   return raw;
 }
 
-/** Pull the JSON block out of a mixed markdown+JSON response */
+/** Pull the JSON block out of the model response and parse it safely */
 function extractJson(raw: string, taskType: TaskType): GradingFeedback {
-  // 1. Dọn dẹp markdown
+  // 1. Dọn dẹp markdown fence nếu model lỡ thêm vào
   let jsonString = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
 
   // 2. Tìm vị trí bắt đầu và kết thúc của JSON
@@ -155,29 +166,45 @@ function extractJson(raw: string, taskType: TaskType): GradingFeedback {
   const end = jsonString.lastIndexOf("}");
 
   if (start === -1 || end === -1 || end < start) {
-    throw new Error("Không tìm thấy cấu trúc JSON hợp lệ.");
+    throw new JsonExtractionError("Không tìm thấy cấu trúc JSON hợp lệ trong phản hồi AI.");
   }
 
   jsonString = jsonString.slice(start, end + 1);
 
-  // 3. XỬ LÝ LỖI ESCAPE CHARACTER (Nguyên nhân gây lỗi 512)
-  jsonString = jsonString.replace(/\\n/g, "\\\\n")
-                        .replace(/\\r/g, "\\\\r")
-                        .replace(/\\t/g, "\\\\t");
-
+  // 3. Thử parse trực tiếp trước — đây là đường đi bình thường khi model trả JSON hợp lệ
   try {
-    const parsed = JSON.parse(jsonString) as GradingFeedback;
-    return sanitizeBands(parsed, taskType);
-  } catch (parseError) {
-    // Nếu vẫn lỗi, thử cách thủ công hơn: loại bỏ các ký tự điều khiển lạ
-    const cleaned = jsonString.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-    const parsed = JSON.parse(cleaned) as GradingFeedback;
-    return sanitizeBands(parsed, taskType);
+    return sanitizeBands(JSON.parse(jsonString) as GradingFeedback, taskType);
+  } catch {
+    // 4. Fallback: chỉ số ít trường hợp model chèn ký tự điều khiển CHƯA escape
+    // (newline/tab thật nằm trong string JSON) mới rơi vào đây.
+    // Escape đúng các ký tự đó thay vì xoá hoặc double-escape các \n đã hợp lệ.
+    const repaired = jsonString.replace(/[\u0000-\u001F]/g, (ch) => {
+      switch (ch) {
+        case "\n":
+          return "\\n";
+        case "\r":
+          return "\\r";
+        case "\t":
+          return "\\t";
+        default:
+          return ""; // ký tự điều khiển lạ khác — loại bỏ an toàn
+      }
+    });
+
+    try {
+      return sanitizeBands(JSON.parse(repaired) as GradingFeedback, taskType);
+    } catch (finalErr) {
+      throw new JsonExtractionError(
+        `AI trả về JSON không hợp lệ và không thể tự sửa: ${(finalErr as Error).message}`,
+      );
+    }
   }
 }
 
-/** Lỗi có nên fallback sang model/provider khác hay không (rate limit/quota/quá tải) */
+/** Lỗi có nên fallback sang model/provider khác hay không (rate limit/quota/quá tải/JSON hỏng) */
 function isFallbackWorthyError(err: any): boolean {
+  if (err instanceof JsonExtractionError) return true;
+
   const status = err?.status ?? err?.response?.status ?? err?.code;
   if (status === 429 || status === 413 || status === 503) return true;
   if (status === "RESOURCE_EXHAUSTED" || status === "UNAVAILABLE") return true;
@@ -230,7 +257,9 @@ async function gradeWithGroq(
     } catch (err: any) {
       lastError = err;
       if (!isFallbackWorthyError(err)) throw err; // lỗi thật (vd 400) → không che giấu
-      console.warn(`⚠️ [groq] model ${model} thất bại (${err?.status ?? "?"}), thử model kế tiếp...`);
+      console.warn(
+        `⚠️ [groq] model ${model} thất bại (${err?.status ?? (err instanceof JsonExtractionError ? "invalid_json" : "?")}), thử model kế tiếp...`,
+      );
     }
   }
 
@@ -279,7 +308,9 @@ async function gradeWithGemini(
     } catch (err: any) {
       lastError = err;
       if (!isFallbackWorthyError(err)) throw err; // lỗi thật (vd prompt bị block, input sai) → không che giấu
-      console.warn(`⚠️ [gemini] model ${model} thất bại (${err?.status ?? err?.code ?? "?"}), thử model kế tiếp...`);
+      console.warn(
+        `⚠️ [gemini] model ${model} thất bại (${err?.status ?? err?.code ?? (err instanceof JsonExtractionError ? "invalid_json" : "?")}), thử model kế tiếp...`,
+      );
     }
   }
 
