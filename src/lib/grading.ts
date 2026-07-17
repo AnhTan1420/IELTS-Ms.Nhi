@@ -52,8 +52,12 @@ QUY TẮC CHÍNH:
    Ví dụ chuẩn:
    - "Lỗi hòa hợp chủ-vị: chủ ngữ số nhiều 'poverty and hunger' cần động từ số nhiều 'remain', không phải 'remains'."
    - "Lỗi thừa định từ (double determiners): không đặt 'our' và 'today's' liền nhau trước danh từ. Sửa: 'today's world' hoặc 'our world today'."
-5. TUYỆT ĐỐI KHÔNG bịa câu trích dẫn. Mọi câu trong "original" và trong phần trích dẫn phải là NGUYÊN VĂN xuất hiện trong bài học sinh. Nếu không tìm được ví dụ phù hợp cho một mục, bỏ qua mục đó thay vì tự viết câu giả định.
 
+5. NHẬN XÉT TỔNG QUAN ("examiner_summary"): TUYỆT ĐỐI CẤM dùng văn mẫu chung chung, sáo rỗng (như "Bài phân tích tốt nhưng còn lỗi ngữ pháp/chính tả"). Nhận xét PHẢI CÁ NHÂN HÓA SÂU SẮC:
+   - Nhắc đến nội dung/chủ đề cụ thể của bài (VD: "Bài viết về chủ đề X đã làm tốt việc...").
+   - Điểm mạnh: Chỉ rõ bài đã dùng tốt cấu trúc ngữ pháp nào, hay từ vựng nào đắt giá.
+   - Điểm yếu: Nhận xét rõ nhóm lỗi sai TẦN SUẤT CAO NHẤT trong bài là gì (VD: "Còn sai nhiều lỗi hòa hợp chủ-vị, lạm dụng mạo từ 'the', từ vựng lặp lại nhiều ở Body 2").
+   
 6. ĐIỂM THÀNH PHẦN (${t.criterionLabel}/${t.criterionKey}, CC, LR, GRA) PHẢI LÀ SỐ NGUYÊN (1, 2, 3, 4, 5, 6, 7, 8, 9). TUYỆT ĐỐI KHÔNG CHẤM ĐIỂM LẺ cho tiêu chí thành phần (không dùng 6.5 hay 7.5).
 7. TÍNH ĐIỂM BAND SCORE CHUNG: Tổng trung bình cộng 4 tiêu chí. Làm tròn theo quy tắc IELTS: phần thập phân .25 → làm tròn lên .5; phần thập phân .75 → làm tròn lên nguyên tiếp theo. (VD: 6.75 → 7.0; 6.25 → 6.5; 6.5 → giữ 6.5).
 8. Chỉ đưa lộ trình lên Band 8.0/9.0 nếu điểm hiện tại đã ≥7.0. Ngược lại chỉ nhắm band kế tiếp (+0.5).
