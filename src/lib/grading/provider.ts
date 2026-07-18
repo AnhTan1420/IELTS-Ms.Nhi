@@ -56,7 +56,7 @@ async function gradeWithGroq(
 // ─────────────────────────────────────────────────────────────
 
 const GEMINI_MODEL_CHAIN: Array<{ model: string; maxOutputTokens: number }> = [
-  { model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash", maxOutputTokens: 4096 },
+  { model: process.env.GEMINI_MODEL ?? "gemini-3-flash-preview", maxOutputTokens: 4096 },
   { model: "gemini-2.5-flash-lite", maxOutputTokens: 3500 },
 ];
 
