@@ -3,15 +3,19 @@ import { GoogleGenAI } from "@google/genai";
 import type { GradingFeedback } from "@/lib/types";
 import type { TaskType } from "./prompt";
 import { buildSystemPrompt } from "./prompt";
+import { buildGradingJsonSchema } from "./schema";
 import { extractJson, isFallbackWorthyError } from "./parse";
 
 // ─────────────────────────────────────────────────────────────
 // Provider: Groq — thử lần lượt 70b (chất lượng cao) rồi 8b (TPM rộng hơn)
+// Groq (OpenAI-compatible) chỉ hỗ trợ response_format:"json_object"
+// (ép JSON hợp lệ về cú pháp), KHÔNG hỗ trợ schema chi tiết như Gemini.
+// => model yếu (8b) dùng prompt "compact" + maxTokens cao hơn để tránh cắt cụt JSON.
 // ─────────────────────────────────────────────────────────────
 
-const GROQ_MODEL_CHAIN: Array<{ model: string; maxTokens: number }> = [
-  { model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile", maxTokens: 3500 },
-  { model: "llama-3.1-8b-instant", maxTokens: 2800 },
+const GROQ_MODEL_CHAIN: Array<{ model: string; maxTokens: number; compact: boolean }> = [
+  { model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile", maxTokens: 3500, compact: false },
+  { model: "llama-3.1-8b-instant", maxTokens: 4096, compact: true },
 ];
 
 async function gradeWithGroq(
@@ -20,17 +24,18 @@ async function gradeWithGroq(
   taskType: TaskType,
 ): Promise<GradingFeedback> {
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  const systemPrompt = buildSystemPrompt(taskType);
   const userContent = `Prompt:\n${testPrompt}\n\nEssay:\n${content}`;
 
   let lastError: any;
 
-  for (const { model, maxTokens } of GROQ_MODEL_CHAIN) {
+  for (const { model, maxTokens, compact } of GROQ_MODEL_CHAIN) {
     try {
+      const systemPrompt = buildSystemPrompt(taskType, { compact });
       const completion = await groq.chat.completions.create({
         model,
         temperature: 0.2,
         max_tokens: maxTokens,
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userContent },
@@ -52,12 +57,14 @@ async function gradeWithGroq(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Provider: Gemini — thử 3.5 Flash (chất lượng cao) rồi 3.1 Flash-Lite (TPM/RPD rộng hơn)
+// Provider: Gemini — thử Flash (chất lượng cao) rồi Flash-Lite (TPM/RPD rộng hơn)
+// Gemini hỗ trợ responseMimeType + responseSchema => ép cấu trúc JSON THẬT SỰ ở
+// tầng API, không chỉ dựa vào lời văn trong prompt.
 // ─────────────────────────────────────────────────────────────
 
-const GEMINI_MODEL_CHAIN: Array<{ model: string; maxOutputTokens: number }> = [
-  { model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash", maxOutputTokens: 4096 },
-  { model: "gemini-3.1-flash-lite", maxOutputTokens: 3500 },
+const GEMINI_MODEL_CHAIN: Array<{ model: string; maxOutputTokens: number; compact: boolean }> = [
+  { model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash", maxOutputTokens: 4096, compact: false },
+  { model: "gemini-3.1-flash-lite", maxOutputTokens: 4096, compact: true },
 ];
 
 async function gradeWithGemini(
@@ -66,13 +73,14 @@ async function gradeWithGemini(
   taskType: TaskType,
 ): Promise<GradingFeedback> {
   const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY });
-  const systemPrompt = buildSystemPrompt(taskType);
   const userContent = `Prompt:\n${testPrompt}\n\nEssay:\n${content}`;
+  const jsonSchema = buildGradingJsonSchema(taskType);
 
   let lastError: any;
 
-  for (const { model, maxOutputTokens } of GEMINI_MODEL_CHAIN) {
+  for (const { model, maxOutputTokens, compact } of GEMINI_MODEL_CHAIN) {
     try {
+      const systemPrompt = buildSystemPrompt(taskType, { compact });
       const response = await ai.models.generateContent({
         model,
         contents: userContent,
@@ -80,6 +88,8 @@ async function gradeWithGemini(
           systemInstruction: systemPrompt,
           temperature: 0.1,
           maxOutputTokens,
+          responseMimeType: "application/json",
+          responseSchema: jsonSchema,
           safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -103,7 +113,7 @@ async function gradeWithGemini(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Public API — Gemini (2.5 Flash → 2.5 Flash-Lite) trước,
+// Public API — Gemini (Flash → Flash-Lite) trước,
 // rớt xuống Groq (70b → 8b) nếu cả 2 model Gemini đều fail
 // ─────────────────────────────────────────────────────────────
 export async function gradeSubmission(
