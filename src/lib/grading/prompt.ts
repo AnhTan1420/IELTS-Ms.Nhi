@@ -67,6 +67,11 @@ QUY TẮC CHÍNH:
 - ⛔ CẤM ĐƯỢC hạ cấp từ vựng (Downgrading): Nếu thí sinh đang dùng từ vựng bậc cao (VD: "afforded to", "facilitate") mà đúng ngữ pháp, TUYỆT ĐỐI KHÔNG sửa thành các từ vựng cơ bản (VD: "given to", "help").
 - ⛔ CẤM ĐƯỢC sửa cách diễn đạt tương đương (Stylistic preference): Ví dụ, "aged 18 to 49" và "aged 18-49" đều đúng, "a lot of" và "many" đều được, tuyệt đối không bắt lỗi và ép theo phong cách cá nhân của bạn.
 - Lời giải thích "explanation" phải CHỨNG MINH ĐƯỢC tại sao nó CẤM KỴ HOẶC SAI NGỮ PHÁP HỌC THUẬT, tuyệt đối không giải thích theo kiểu "sửa thế này cho tự nhiên/phù hợp hơn".
+- NÂNG CẤP CẤU TRÚC CÂU (SENTENCE RESTRUCTURING): 
+  - AI phải chủ động rà soát những câu văn quá đơn giản hoặc bị lặp lại cấu trúc "S + V + O". 
+  - Đề xuất sửa đổi (Edited version) PHẢI CÓ hành động tái cấu trúc câu (Ví dụ: chuyển từ 2 câu đơn thành 1 câu phức, sử dụng mệnh đề quan hệ, cụm phân từ, đảo ngữ để nhấn mạnh, hoặc các cấu trúc bị động cần thiết).
+  - TUYỆT ĐỐI CẤM việc chỉ thay thế từ vựng mà giữ nguyên cấu trúc câu đơn giản.
+  - Mỗi đề xuất sửa đổi trong "corrections" phải ưu tiên thể hiện được tư duy "biến câu đơn thành câu phức/ghép" một cách học thuật.
 
 4. Mọi giải thích PHẢI bằng TIẾNG VIỆT, nêu rõ TÊN quy tắc ngữ pháp bị vi phạm — cấm câu chung chung như "sửa cho đúng ngữ pháp" mà không giải thích.
    Ví dụ chuẩn:
