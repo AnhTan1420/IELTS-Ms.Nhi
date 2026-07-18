@@ -3,6 +3,7 @@
 import { AlertTriangle, BookOpen, Bot, Image as ImageIcon, Sparkles, Type } from "lucide-react";
 import type { GradingFeedback } from "@/lib/types";
 import { countMatchedCorrections, countWords } from "./submission-utils";
+import ExaminerSummaryCard from "./ExaminerSummaryCard"; // 👈 thêm dòng này
 
 type GradingResultPanelProps = {
   feedback: GradingFeedback;
@@ -10,8 +11,6 @@ type GradingResultPanelProps = {
   task2Answer?: string;
 };
 
-// Card "Đánh giá từ AI Examiner": band tổng, thống kê từ/lỗi theo Task, nhận xét,
-// bảng điểm chi tiết Task 1/Task 2, và danh sách lỗi sai + đề xuất sửa (corrections diff).
 export default function GradingResultPanel({ feedback, task1Answer, task2Answer }: GradingResultPanelProps) {
   return (
     <div className="mt-8 rounded-3xl border border-cyan-200/60 bg-gradient-to-br from-cyan-50/80 to-white overflow-hidden shadow-sm">
@@ -32,7 +31,6 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
       </div>
 
       <div className="p-6 space-y-8">
-        {/* Thống kê từ & lỗi — tách riêng theo từng Task */}
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             { label: "Task 1", text: task1Answer, icon: <ImageIcon className="h-3.5 w-3.5" /> },
@@ -71,22 +69,16 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
           })}
         </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-cyan-100/50 shadow-sm relative">
-          <div className="absolute top-0 left-0 w-1 h-full bg-cyan-400 rounded-l-2xl"></div>
-          <p className="text-[15px] leading-relaxed text-slate-700 italic whitespace-pre-line">
-            {feedback.examiner_summary}
-          </p>
-        </div>
+        {/* 👇 Thay khối <p> markdown thô bằng card có cấu trúc */}
+        <ExaminerSummaryCard summary={feedback.examiner_summary} />
 
         <div className="grid gap-5 sm:grid-cols-2">
-          {/* Task 1 Card */}
           {feedback.task1 && (
             <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
               <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                 <span className="font-bold text-slate-800 flex items-center gap-2">
                   <ImageIcon className="h-4 w-4 text-slate-400" /> Task 1
                 </span>
-                {/* Giữ nguyên Band điểm lẻ */}
                 <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
                   Band {feedback.task1.band}
                 </span>
@@ -101,7 +93,6 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
                   ].map((item, i) => (
                     <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
                       <dt className="text-slate-500 font-medium">{item.label}</dt>
-                      {/* Ép kiểu về số nguyên ở đây 👇 */}
                       <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
                         {item.score !== undefined && item.score !== null && !isNaN(Number(item.score))
                           ? Math.round(Number(item.score))
@@ -114,14 +105,12 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
             </div>
           )}
 
-          {/* Task 2 Card */}
           {feedback.task2 && (
             <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden hover:border-cyan-300 transition-colors">
               <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                 <span className="font-bold text-slate-800 flex items-center gap-2">
                   <BookOpen className="h-4 w-4 text-slate-400" /> Task 2
                 </span>
-                {/* Giữ nguyên Band điểm lẻ */}
                 <span className="rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold px-3 py-1">
                   Band {feedback.task2.band}
                 </span>
@@ -136,7 +125,6 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
                   ].map((item, i) => (
                     <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
                       <dt className="text-slate-500 font-medium">{item.label}</dt>
-                      {/* Ép kiểu về số nguyên ở đây 👇 */}
                       <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
                         {item.score !== undefined && item.score !== null && !isNaN(Number(item.score))
                           ? Math.round(Number(item.score))
@@ -150,7 +138,6 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
           )}
         </div>
 
-        {/* Corrections Diff */}
         {feedback.corrections && feedback.corrections.length > 0 && (
           <div className="pt-4">
             <h4 className="font-black text-slate-900 mb-4 text-lg flex items-center gap-2">
