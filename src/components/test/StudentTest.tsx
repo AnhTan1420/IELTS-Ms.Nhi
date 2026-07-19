@@ -1,19 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  CheckCircle2,
-  AlertTriangle,
-  Send,
-  User,
-  Maximize,
-  ShieldAlert,
-  Timer,
-  ZoomIn,
-  X,
-} from "lucide-react";
+import { AlertTriangle, Send, ShieldAlert, Timer, User } from "lucide-react";
 import { useAntiCheat } from "@/hooks/useAntiCheat";
 import { useExamTimer } from "@/hooks/useExamTimer";
+import { AUTOSAVE_INTERVAL_MS, TASK1_MIN_WORDS, TASK2_MIN_WORDS, countWords, scrollToRef } from "@/lib/student-test-utils";
+import NavPill from "./NavPill";
+import TaskCard from "./TaskCard";
+import SetupScreen from "./SetupScreen";
+import DisqualifiedScreen from "./DisqualifiedScreen";
+import SubmittedScreen from "./SubmittedScreen";
+import ImageZoomOverlay from "./ImageZoomOverlay";
 
 export interface StudentTestProps {
   testId: string;
@@ -25,136 +22,6 @@ export interface StudentTestProps {
 }
 
 type Step = "setup" | "testing" | "submitted" | "disqualified";
-
-const AUTOSAVE_INTERVAL_MS = 5000;
-
-// Số từ tối thiểu theo band descriptor thật của IELTS Writing — khớp với
-// TASK_CONFIG.task1/task2.minWords bên `src/lib/grading/prompt.ts` để thanh
-// tiến độ hiển thị cho học sinh và mức phạt AI chấm ở phía sau dùng chung một
-// "sự thật" duy nhất, không lệch số với nhau.
-const TASK1_MIN_WORDS = 150;
-const TASK2_MIN_WORDS = 250;
-
-function countWords(text: string): number {
-  return text.trim().split(/\s+/).filter((w) => w.length > 0).length;
-}
-
-function scrollToRef(ref: React.RefObject<HTMLElement | null>) {
-  ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-// Pill điều hướng nhanh trong thanh sub-nav dính đầu trang — tích xanh khi
-// học sinh đã bắt đầu gõ bài, giúp định vị "mình đang ở đâu" trong bài thi.
-function NavPill({ label, done, onClick }: { label: string; done: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-        done
-          ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
-          : "bg-white/5 text-slate-300 ring-1 ring-white/10 hover:bg-white/10"
-      }`}
-    >
-      {done && <CheckCircle2 className="h-3.5 w-3.5" />}
-      {label}
-    </button>
-  );
-}
-
-type TaskCardProps = {
-  taskNumber: 1 | 2;
-  prompt: string | null;
-  imageUrl?: string | null;
-  answer: string;
-  onAnswerChange: (value: string) => void;
-  minWords: number;
-  sectionRef: React.RefObject<HTMLElement | null>;
-  onImageZoom?: () => void;
-};
-
-// Thẻ 1 Task: panel trái là "tờ đề" (nền giấy ngà, chữ serif — mô phỏng cảm
-// giác đọc đề thi in giấy thật), panel phải là khung viết bài + thanh tiến độ
-// số từ tối thiểu (điều học sinh IELTS luôn lo lắng nhất khi làm bài).
-function TaskCard({
-  taskNumber,
-  prompt,
-  imageUrl,
-  answer,
-  onAnswerChange,
-  minWords,
-  sectionRef,
-  onImageZoom,
-}: TaskCardProps) {
-  const words = countWords(answer);
-  const pct = Math.min(100, Math.round((words / minWords) * 100));
-  const met = words >= minWords;
-
-  return (
-    <section ref={sectionRef} className="scroll-mt-32 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <div className="grid lg:grid-cols-2">
-        {/* Panel đề bài — "tờ giấy thi" */}
-        <div className="relative border-b border-[#E4D9B8] bg-[#F6F1E2] p-6 sm:p-8 lg:border-b-0 lg:border-r">
-          <span
-            aria-hidden
-            className="pointer-events-none absolute -top-3 right-4 select-none font-serif text-[110px] leading-none text-[#E9DFC0]"
-          >
-            {taskNumber}
-          </span>
-          <div className="relative">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">
-              Task {taskNumber}
-            </span>
-            <p className="mt-4 whitespace-pre-wrap font-serif text-[17px] leading-[1.85] text-slate-800">{prompt}</p>
-
-            {imageUrl && (
-              <button
-                type="button"
-                onClick={onImageZoom}
-                className="group mt-5 block w-full overflow-hidden rounded-xl border border-[#E4D9B8] bg-white text-left transition hover:border-cyan-300"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imageUrl} alt="Biểu đồ minh họa Task 1" className="max-h-[440px] w-full object-contain" />
-                <span className="flex items-center justify-center gap-1.5 border-t border-[#E4D9B8] bg-white/80 py-2 text-xs font-semibold text-slate-500 transition group-hover:text-cyan-700">
-                  <ZoomIn className="h-3.5 w-3.5" /> Bấm để phóng to
-                </span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Panel bài làm */}
-        <div className="flex flex-col p-6 sm:p-8">
-          <label className="mb-2 text-sm font-semibold text-slate-700">Bài làm Task {taskNumber} của bạn</label>
-          <textarea
-            className="min-h-[320px] w-full flex-1 resize-y rounded-2xl border border-slate-300 p-4 font-serif text-[15px] leading-[1.9] text-slate-800 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10"
-            placeholder="Nhập bài làm tiếng Anh..."
-            value={answer}
-            onChange={(e) => onAnswerChange(e.target.value)}
-          />
-
-          <div className="mt-3">
-            <div className="mb-1.5 flex items-center justify-between text-xs font-semibold">
-              <span className={`flex items-center gap-1 ${met ? "text-emerald-600" : "text-slate-600"}`}>
-                {met && <CheckCircle2 className="h-3.5 w-3.5" />}
-                {words} / {minWords} từ
-              </span>
-              <span className="text-slate-400">
-                {met ? "Đã đạt yêu cầu tối thiểu" : `Còn thiếu ${minWords - words} từ`}
-              </span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${met ? "bg-emerald-500" : "bg-amber-400"}`}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 export default function StudentTest({
   testId,
@@ -261,7 +128,7 @@ export default function StudentTest({
             end_reason: "disqualified",
             status: "disqualified"
           }),
-        }).catch(() => {});
+        }).catch((err) => console.error("Không lưu được bài làm khi hủy thi:", err));
       }
     },
   });
@@ -284,7 +151,7 @@ export default function StudentTest({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: combinedContent }),
-      }).catch(() => {});
+      }).catch((err) => console.error("Autosave thất bại:", err));
     }, AUTOSAVE_INTERVAL_MS);
 
     return () => clearInterval(interval);
@@ -333,108 +200,26 @@ export default function StudentTest({
     await finalizeSubmission("manual");
   };
 
-  // ==========================================
-  // MÀN HÌNH 1: NHẬP TÊN TRƯỚC KHI THI
-  // ==========================================
   if (step === "setup") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 text-slate-950">
-        <div className="w-full max-w-md">
-          <div className="mb-6 text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white">
-              IELTS Writing Test
-            </span>
-          </div>
-
-          <div className="w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-            <h1 className="mb-1 font-serif text-2xl font-bold leading-snug text-slate-900">{title}</h1>
-            <p className="mb-6 text-sm text-slate-500">
-              Thời gian làm bài: <strong className="font-semibold text-slate-700">{durationMinutes} phút</strong>
-            </p>
-
-            <ul className="mb-6 space-y-2.5 text-sm leading-relaxed text-slate-600">
-              <li className="flex items-start gap-2.5">
-                <Maximize className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600" />
-                Bài thi chạy toàn màn hình (fullscreen) trong suốt thời gian làm bài.
-              </li>
-              <li className="flex items-start gap-2.5">
-                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                Hệ thống giám sát hành vi thoát fullscreen / chuyển tab — tối đa 5 lần vi phạm trước khi bài bị hủy.
-              </li>
-              <li className="flex items-start gap-2.5">
-                <Timer className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                Bài sẽ tự động nộp khi hết giờ, kể cả khi bạn chưa bấm nút nộp.
-              </li>
-            </ul>
-
-            {error && (
-              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
-            )}
-
-            <form onSubmit={handleStartTest} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-slate-700">Họ và tên của bạn</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10"
-                    placeholder="Ví dụ: Nguyễn Văn A"
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting || !studentName.trim()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3.5 font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
-              >
-                <Maximize className="h-5 w-5" />
-                {isSubmitting ? "Đang tải bài thi..." : "Vào phòng thi (Bật Fullscreen)"}
-              </button>
-            </form>
-          </div>
-        </div>
-      </main>
+      <SetupScreen
+        title={title}
+        durationMinutes={durationMinutes}
+        studentName={studentName}
+        onStudentNameChange={setStudentName}
+        error={error}
+        isSubmitting={isSubmitting}
+        onSubmit={handleStartTest}
+      />
     );
   }
 
-  // ==========================================
-  // MÀN HÌNH 2: BỊ HỦY BÀI THI (GIAN LẬN)
-  // ==========================================
   if (step === "disqualified" || isLocked || warnings >= maxWarnings) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-6 text-center text-white">
-        <ShieldAlert className="mb-4 h-20 w-20 text-red-500" />
-        <h1 className="mb-2 text-3xl font-bold text-red-500">BÀI THI BỊ HỦY</h1>
-        <p className="max-w-md text-slate-400">
-          Bạn đã vi phạm quy chế thi (thoát toàn màn hình hoặc chuyển tab) {warnings} lần.
-          {warnings >= maxWarnings && ` Giới hạn tối đa là ${maxWarnings} lần.`}
-          Bài làm của bạn đã bị khóa và đánh dấu gian lận.
-        </p>
-      </main>
-    );
+    return <DisqualifiedScreen warnings={warnings} maxWarnings={maxWarnings} />;
   }
 
-  // ==========================================
-  // MÀN HÌNH 3: NỘP BÀI THÀNH CÔNG
-  // ==========================================
   if (step === "submitted") {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 text-slate-950">
-        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-emerald-500" />
-          <h1 className="mb-2 text-2xl font-bold text-slate-900">Nộp bài thành công!</h1>
-          <p className="mb-6 text-slate-500">
-            Bạn đã hoàn thành bài thi IELTS Writing một cách an toàn. Hệ thống AI đang chấm bài và giáo viên sẽ xem
-            lại kết quả sớm nhất.
-          </p>
-        </div>
-      </main>
-    );
+    return <SubmittedScreen />;
   }
 
   // ==========================================
@@ -442,6 +227,8 @@ export default function StudentTest({
   // ==========================================
   const task1Words = countWords(task1Answer);
   const task2Words = countWords(task2Answer);
+  const hasTask1 = Boolean(task1Prompt || imageUrl);
+  const hasTask2 = Boolean(task2Prompt);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -473,11 +260,12 @@ export default function StudentTest({
           </div>
         </div>
 
-        {/* Sub-nav: nhảy nhanh giữa các phần, không mất dấu đang làm tới đâu */}
+        {/* Sub-nav: nhảy nhanh giữa các phần, không mất dấu đang làm tới đâu.
+            Chỉ hiện pill của task thực sự tồn tại trong đề (đề có thể chỉ có Task 2). */}
         <div className="border-t border-white/5">
           <div className="no-scrollbar mx-auto flex max-w-6xl items-center gap-2 overflow-x-auto px-6 py-2.5">
-            <NavPill label="Task 1" done={task1Words > 0} onClick={() => scrollToRef(task1Ref)} />
-            <NavPill label="Task 2" done={task2Words > 0} onClick={() => scrollToRef(task2Ref)} />
+            {hasTask1 && <NavPill label="Task 1" done={task1Words > 0} onClick={() => scrollToRef(task1Ref)} />}
+            {hasTask2 && <NavPill label="Task 2" done={task2Words > 0} onClick={() => scrollToRef(task2Ref)} />}
             <span className="flex-1" />
             <button
               type="button"
@@ -522,7 +310,7 @@ export default function StudentTest({
         )}
 
         <form onSubmit={handleSubmitFinal} className="space-y-8">
-          {(task1Prompt || imageUrl) && (
+          {hasTask1 && (
             <TaskCard
               taskNumber={1}
               prompt={task1Prompt}
@@ -535,7 +323,7 @@ export default function StudentTest({
             />
           )}
 
-          {task2Prompt && (
+          {hasTask2 && (
             <TaskCard
               taskNumber={2}
               prompt={task2Prompt}
@@ -569,28 +357,8 @@ export default function StudentTest({
         </form>
       </div>
 
-      {/* Ảnh biểu đồ Task 1 phóng to */}
       {imageUrl && isImageZoomed && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-6 backdrop-blur-sm"
-          onClick={() => setIsImageZoomed(false)}
-        >
-          <button
-            type="button"
-            onClick={() => setIsImageZoomed(false)}
-            className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
-            aria-label="Đóng"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageUrl}
-            alt="Biểu đồ Task 1 (phóng to)"
-            className="max-h-[88vh] max-w-[92vw] w-auto rounded-2xl border border-white/10 bg-white object-contain shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        <ImageZoomOverlay imageUrl={imageUrl} onClose={() => setIsImageZoomed(false)} />
       )}
     </main>
   );
