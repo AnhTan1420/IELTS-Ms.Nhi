@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertOctagon, Languages, Star, Lightbulb, Target, Link2, SpellCheck2, PenTool } from "lucide-react";
+import { sanitizeBandMentions } from "./band-sanitizer";
 
 type CriterionItem = { label: string; content: string };
 type DiagnosisItem = { label: string | null; content: string };
@@ -25,8 +26,6 @@ function parseBulletLabel(bullet: string): DiagnosisItem {
   return { label: null, content: bullet };
 }
 
-// Parse ĐÚNG 1 khối nhận xét của 1 task (đã được tách sẵn ở nơi gọi) thành
-// "1. Criteria" và "2. Diagnosis" theo template cố định trong prompt.
 export function parseExaminerSummary(raw: string): { criteria: CriterionItem[]; diagnosis: DiagnosisItem[] } {
   if (!raw) return { criteria: [], diagnosis: [] };
 
@@ -70,16 +69,23 @@ function diagnosisStyle(label: string | null) {
   return { Icon: Lightbulb, color: "text-cyan-700", bg: "bg-cyan-50", border: "border-cyan-200" };
 }
 
-export default function ExaminerSummaryCard({ summary }: { summary: string }) {
+type ExaminerSummaryCardProps = {
+  summary: string;
+  // Danh sách điểm THẬT SỰ đã chấm (TA/TR, CC, LR, GRA của đúng task này) —
+  // dùng để lọc bỏ những câu nhắc "Band X.X" không khớp bất kỳ điểm nào,
+  // vì đó là dấu hiệu model tự mâu thuẫn giữa văn xuôi và điểm số JSON.
+  validBands: number[];
+};
+
+export default function ExaminerSummaryCard({ summary, validBands }: ExaminerSummaryCardProps) {
   const { criteria, diagnosis } = parseExaminerSummary(summary);
 
-  // Fallback: nếu model không theo đúng template (parse ra rỗng), vẫn hiển thị
-  // nguyên văn thay vì mất trắng nội dung — chỉ xử lý bold inline + line-break.
   if (criteria.length === 0 && diagnosis.length === 0) {
+    const sanitized = sanitizeBandMentions(summary, validBands);
     return (
       <div className="rounded-2xl bg-white p-5 border border-cyan-100/50 shadow-sm relative">
         <div className="absolute top-0 left-0 w-1 h-full bg-cyan-400 rounded-l-2xl" />
-        <p className="text-[15px] leading-relaxed text-slate-700 whitespace-pre-line">{renderInline(summary)}</p>
+        <p className="text-[15px] leading-relaxed text-slate-700 whitespace-pre-line">{renderInline(sanitized)}</p>
       </div>
     );
   }
@@ -94,6 +100,7 @@ export default function ExaminerSummaryCard({ summary }: { summary: string }) {
           <div className="grid gap-3 sm:grid-cols-2">
             {criteria.map((item, i) => {
               const { Icon, color, bg } = criterionIcon(item.label);
+              const sanitizedContent = sanitizeBandMentions(item.content, validBands);
               return (
                 <div key={i} className="rounded-2xl bg-white border border-slate-200/60 shadow-sm p-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -102,7 +109,7 @@ export default function ExaminerSummaryCard({ summary }: { summary: string }) {
                     </div>
                     <span className="text-sm font-bold text-slate-800">{item.label}</span>
                   </div>
-                  <p className="text-[13px] leading-relaxed text-slate-600">{renderInline(item.content)}</p>
+                  <p className="text-[13px] leading-relaxed text-slate-600">{renderInline(sanitizedContent)}</p>
                 </div>
               );
             })}
@@ -118,12 +125,13 @@ export default function ExaminerSummaryCard({ summary }: { summary: string }) {
           <div className="space-y-2.5">
             {diagnosis.map((item, i) => {
               const { Icon, color, bg, border } = diagnosisStyle(item.label);
+              const sanitizedContent = sanitizeBandMentions(item.content, validBands);
               return (
                 <div key={i} className={`rounded-xl ${bg} border ${border} p-3.5 flex items-start gap-2.5`}>
                   <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${color}`} />
                   <p className="text-[13px] leading-relaxed text-slate-700">
                     {item.label && <span className={`font-bold ${color}`}>{item.label}: </span>}
-                    {renderInline(item.content)}
+                    {renderInline(sanitizedContent)}
                   </p>
                 </div>
               );
