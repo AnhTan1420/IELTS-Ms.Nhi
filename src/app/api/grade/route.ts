@@ -14,6 +14,14 @@ export const dynamic = 'force-dynamic';
 // Công thức làm tròn khớp CHÍNH XÁC quy tắc đã mô tả trong buildSystemPrompt:
 // .25 → làm tròn lên .5; .75 → làm tròn lên nguyên tiếp theo; .0/.5 giữ nguyên.
 // ─────────────────────────────────────────────────────────────
+function filterTrivialCorrections(corrections: any[]): any[] {
+  return (corrections || []).filter((c) => {
+    const original = String(c?.original ?? "").trim().toLowerCase();
+    const corrected = String(c?.corrected ?? "").trim().toLowerCase();
+    return original !== corrected && original.length > 0 && corrected.length > 0;
+  });
+}
+
 function roundIeltsBand(avg: number): number {
   const rem = avg % 1;
   if (Math.abs(rem - 0.25) < 1e-9) return Math.floor(avg) + 0.5;
@@ -100,8 +108,8 @@ export async function POST(request: Request) {
           GRA: fb2GRA,
         },
         corrections: [
-          ...(fb1.corrections || []).map((c: any) => ({ ...c, task: "task1" as const })),
-          ...(fb2.corrections || []).map((c: any) => ({ ...c, task: "task2" as const })),
+          ...filterTrivialCorrections(fb1.corrections || []).map((c: any) => ({ ...c, task: "task1" as const })),
+          ...filterTrivialCorrections(fb2.corrections || []).map((c: any) => ({ ...c, task: "task2" as const })),
         ],
       };
     } else {
@@ -130,7 +138,7 @@ export async function POST(request: Request) {
       feedback = {
         ...raw,
         overall_band: computedBand,
-        corrections: (raw.corrections || []).map((c: any) => ({ ...c, task: taskType })),
+        corrections: filterTrivialCorrections(raw.corrections || []).map((c: any) => ({ ...c, task: taskType })),
         task1: taskType === "task1" ? taskScoreObject : null,
         task2: taskType === "task2" ? taskScoreObject : null,
         ...(taskType === "task1"
@@ -145,11 +153,11 @@ export async function POST(request: Request) {
       .eq("id", submissionId);
 
     if (error) {
-        console.error("❌ Supabase Error:", error);
-        return NextResponse.json({ 
-            error: "Lỗi lưu kết quả vào Database.", 
-            detail: error.message 
-        }, { status: 502 });
+      console.error("❌ Supabase Error:", error);
+      return NextResponse.json({
+        error: "Lỗi lưu kết quả vào Database.",
+        detail: error.message
+      }, { status: 502 });
     }
 
     return NextResponse.json(feedback);
@@ -162,7 +170,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        error: isAIOverload 
+        error: isAIOverload
           ? "Hệ thống AI đang quá tải hoặc hết lượt dùng. Vui lòng thử lại sau hoặc liên hệ Anh Tân."
           : "Đã xảy ra lỗi hệ thống nghiêm trọng.",
         detail: technicalDetail

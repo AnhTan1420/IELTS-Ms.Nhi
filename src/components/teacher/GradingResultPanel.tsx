@@ -46,6 +46,15 @@ function resolveTaskCorrections(feedback: GradingFeedback, task: "task1" | "task
   return all.filter((c) => answerText.includes(c.original));
 }
 
+// Hiển thị ĐÚNG giá trị band (band IELTS luôn là bội số 0.5, VD 7, 7.5, 8) —
+// KHÔNG làm tròn về số nguyên, vì Math.round(7.5) = 8 sẽ khiến điểm hiển thị
+// trông cao hơn thực tế, tạo cảm giác mâu thuẫn với overall band ở badge.
+function formatBandScore(score: unknown): string {
+  const n = Number(score);
+  if (score === undefined || score === null || Number.isNaN(n)) return String(score ?? "");
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
 export default function GradingResultPanel({ feedback, task1Answer, task2Answer }: GradingResultPanelProps) {
   const task1Summary = feedback.task1 ? resolveTaskSummary(feedback, "task1") : null;
   const task2Summary = feedback.task2 ? resolveTaskSummary(feedback, "task2") : null;
@@ -131,9 +140,7 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
                     <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
                       <dt className="text-slate-500 font-medium">{item.label}</dt>
                       <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
-                        {item.score !== undefined && item.score !== null && !isNaN(Number(item.score))
-                          ? Math.round(Number(item.score))
-                          : item.score}
+                        {formatBandScore(item.score)}
                       </dd>
                     </div>
                   ))}
@@ -231,9 +238,7 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
                     <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
                       <dt className="text-slate-500 font-medium">{item.label}</dt>
                       <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
-                        {item.score !== undefined && item.score !== null && !isNaN(Number(item.score))
-                          ? Math.round(Number(item.score))
-                          : item.score}
+                        {formatBandScore(item.score)}
                       </dd>
                     </div>
                   ))}
