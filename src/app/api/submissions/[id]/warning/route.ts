@@ -13,67 +13,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const supabaseAdmin = getSupabaseAdmin();
 
-  const { data: submission, error: fetchError } = await supabaseAdmin
-    .from("submissions")
-    .select("warning_count, status")
-    .eq("id", id)
+  // Toàn bộ logic (đọc trạng thái, tăng warning_count, cập nhật status,
+  // ghi bản ghi warnings) giờ chạy atomic trong 1 hàm SQL — xem
+  // increment_submission_warning() trong optimize_schema.sql. Postgres tự
+  // khóa row bằng "for update" nên 2 request bắn gần như cùng lúc không còn
+  // giẫm lên nhau (lost update) như bản SELECT-rồi-UPDATE cũ nữa.
+  const { data, error } = await supabaseAdmin
+    .rpc("increment_submission_warning", {
+      p_submission_id: id,
+      p_reason: reason,
+      p_max_warnings: MAX_WARNINGS,
+    })
     .single();
 
-  if (fetchError || !submission) {
-    return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+  if (error) {
+    // Hàm SQL raise exception khi không tìm thấy submission -> Postgres trả
+    // lỗi về đây, message thường có dạng "Submission <uuid> not found".
+    if (error.message?.includes("not found")) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    }
+    console.error("Failed to increment warning:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (submission.status !== "in_progress") {
-    return NextResponse.json({
-      warningCount: submission.warning_count,
-      status: submission.status,
-      maxWarnings: MAX_WARNINGS,
-    });
-  }
+  const result = data as {
+    warning_count: number;
+    status: string;
+    disqualified: boolean;
+    already_finished: boolean;
+  };
 
-  const nextCount = submission.warning_count + 1;
-  const disqualified = nextCount >= MAX_WARNINGS;
+  console.log(
+    `[AntiCheat] Submission ${id}: warning_count=${result.warning_count}, status=${result.status}` +
+      (result.already_finished ? " (already finished, không tăng thêm)" : "")
+  );
 
-  // Debug logging
-  console.log(`[AntiCheat] Warning for submission ${id}: current=${submission.warning_count}, next=${nextCount}, disqualified=${disqualified}`);
-
-  // Try to insert warning record (non-blocking - don't fail if it fails)
-  // Note: This is for audit only, failures are silently ignored
-  try {
-    await supabaseAdmin.from("warnings").insert({
-      submission_id: id,
-      reason,
-      warning_number: nextCount,
-    });
-  } catch {
-    // ignore insert failures
-  }
-
-  // Update submission with new warning count and status
-  // To avoid race conditions with concurrent requests, we use a single UPDATE
-  // that increments the count. If warnings are coming in very fast, we trust
-  // the local count and update accordingly.
-  const { error: updateError } = await supabaseAdmin
-    .from("submissions")
-    .update({
-      warning_count: nextCount,
-      status: disqualified ? "disqualified" : "in_progress",
-      end_reason: disqualified ? "disqualified" : null,
-      submitted_at: disqualified ? new Date().toISOString() : null,
-    })
-    .eq("id", id);
-
-  console.log(`[AntiCheat] Updated submission ${id}: warning_count=${nextCount}, status=${disqualified ? "disqualified" : "in_progress"}`);
-
-  if (updateError) {
-    console.error('Failed to update warning count:', updateError);
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
-  }
-
-  // Always return the updated count - frontend needs this to show correct warning count
   return NextResponse.json({
-    warningCount: nextCount,
-    status: disqualified ? "disqualified" : "in_progress",
+    warningCount: result.warning_count,
+    status: result.status,
     maxWarnings: MAX_WARNINGS,
   });
 }
