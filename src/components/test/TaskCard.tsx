@@ -74,6 +74,14 @@ export default function TaskCard({
             placeholder="Nhập bài làm tiếng Anh..."
             value={answer}
             onChange={(e) => onAnswerChange(e.target.value)}
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
+            autoComplete="off"
+            data-gramm="false"
+            data-gramm_editor="false"
+            data-enable-grammarly="false"
+            data-ms-editor="false"
           />
 
           <div className="mt-3">
