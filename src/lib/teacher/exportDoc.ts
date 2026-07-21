@@ -113,8 +113,55 @@ function escapeHtml(value?: string) {
     .replace(/>/g, "&gt;");
 }
 
-// Dựng phần HTML cho Task 1 & Task 2 (đề bài + ảnh + bài làm) — dùng chung cho mọi kiểu export
-function buildTaskSectionsHtml(sections: ExportSections) {
+// Bản HTML tĩnh của renderHighlightedAnswer (submission-utils.tsx) — cùng thuật toán tìm vị trí
+// "original" trong text (khớp chính xác, fallback không phân biệt hoa/thường, bỏ overlap), nhưng
+// xuất ra <span> tô vàng có gạch chân thay vì <button> bấm được (Word không cần tương tác).
+function highlightAnswerHtml(text: string, corrections: Correction[]): string {
+  if (!text) return "";
+  if (!corrections || corrections.length === 0) return escapeHtml(text);
+
+  type Match = { start: number; end: number };
+  const matches: Match[] = [];
+  for (const c of corrections) {
+    if (!c?.original) continue;
+    let idx = text.indexOf(c.original);
+    if (idx === -1) idx = text.toLowerCase().indexOf(c.original.toLowerCase());
+    if (idx === -1) continue;
+    matches.push({ start: idx, end: idx + c.original.length });
+  }
+  if (matches.length === 0) return escapeHtml(text);
+
+  matches.sort((a, b) => a.start - b.start);
+  const filtered: Match[] = [];
+  let lastEnd = -1;
+  for (const m of matches) {
+    if (m.start >= lastEnd) {
+      filtered.push(m);
+      lastEnd = m.end;
+    }
+  }
+
+  let html = "";
+  let cursor = 0;
+  filtered.forEach((m) => {
+    if (m.start > cursor) html += escapeHtml(text.slice(cursor, m.start));
+    html += `<span style="background:#fde68a;text-decoration:underline;text-decoration-color:#f59e0b;text-underline-offset:2px;border-radius:2px;padding:0 1px;">${escapeHtml(
+      text.slice(m.start, m.end),
+    )}</span>`;
+    cursor = m.end;
+  });
+  if (cursor < text.length) html += escapeHtml(text.slice(cursor));
+  return html;
+}
+
+// Dựng phần HTML cho Task 1 & Task 2 (đề bài + ảnh + bài làm) — dùng chung cho mọi kiểu export.
+// task1Corrections/task2Corrections (mặc định []) dùng để tô vàng đúng đoạn bị AI sửa, y hệt cách
+// SubmissionDetail.tsx hiển thị trên UI (renderHighlightedAnswer).
+function buildTaskSectionsHtml(
+  sections: ExportSections,
+  task1Corrections: Correction[] = [],
+  task2Corrections: Correction[] = [],
+) {
   let html = "";
 
   html += `<h3 style="font-size:15pt;color:#0f172a;border-left:5px solid #06b6d4;padding-left:12px;margin-top:32px;margin-bottom:14px;">TASK 1</h3>`;
@@ -135,8 +182,10 @@ function buildTaskSectionsHtml(sections: ExportSections) {
     </div>`;
   }
   html += `<div style="margin-bottom:14px;">
-    <p style="margin:0 0 6px 0;font-size:10.5pt;font-weight:bold;color:#64748b;letter-spacing:0.03em;text-transform:uppercase;">Bài làm học sinh</p>
-    <p style="white-space:pre-wrap;font-size:12.5pt;line-height:2;">${sections.task1Answer ? escapeHtml(sections.task1Answer) : "<i>Học sinh chưa làm Task 1</i>"}</p>
+    <p style="margin:0 0 8px 0;font-size:10.5pt;font-weight:bold;color:#94a3b8;letter-spacing:0.05em;text-transform:uppercase;">Bài làm học sinh</p>
+    <div style="white-space:pre-wrap;font-family:Georgia,'Times New Roman',serif;font-size:12.5pt;line-height:2;background:#fcfcfc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;color:#1e293b;">${
+      sections.task1Answer ? highlightAnswerHtml(sections.task1Answer, task1Corrections) : "<i>Học sinh chưa làm Task 1</i>"
+    }</div>
   </div>`;
 
   html += `<h3 style="font-size:15pt;color:#0f172a;border-left:5px solid #06b6d4;padding-left:12px;margin-top:32px;margin-bottom:14px;">TASK 2</h3>`;
@@ -147,8 +196,10 @@ function buildTaskSectionsHtml(sections: ExportSections) {
     </div>`;
   }
   html += `<div style="margin-bottom:14px;">
-    <p style="margin:0 0 6px 0;font-size:10.5pt;font-weight:bold;color:#64748b;letter-spacing:0.03em;text-transform:uppercase;">Bài làm học sinh</p>
-    <p style="white-space:pre-wrap;font-size:12.5pt;line-height:2;">${sections.task2Answer ? escapeHtml(sections.task2Answer) : "<i>Học sinh chưa làm Task 2</i>"}</p>
+    <p style="margin:0 0 8px 0;font-size:10.5pt;font-weight:bold;color:#94a3b8;letter-spacing:0.05em;text-transform:uppercase;">Bài làm học sinh</p>
+    <div style="white-space:pre-wrap;font-family:Georgia,'Times New Roman',serif;font-size:12.5pt;line-height:2;background:#fcfcfc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;color:#1e293b;">${
+      sections.task2Answer ? highlightAnswerHtml(sections.task2Answer, task2Corrections) : "<i>Học sinh chưa làm Task 2</i>"
+    }</div>
   </div>`;
 
   return html;
@@ -312,7 +363,9 @@ function buildFullDocHtml(studentName: string, sections: ExportSections, feedbac
   const footer = "</body></html>";
 
   let sourceHTML = `<h2 style="font-size:20pt;text-align:center;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:14px;margin-bottom:20px;">Bài làm của ${escapeHtml(studentName)}</h2>`;
-  sourceHTML += buildTaskSectionsHtml(sections);
+  const task1Corrections = feedback ? resolveTaskCorrections(feedback, "task1", sections.task1Answer) : [];
+  const task2Corrections = feedback ? resolveTaskCorrections(feedback, "task2", sections.task2Answer) : [];
+  sourceHTML += buildTaskSectionsHtml(sections, task1Corrections, task2Corrections);
 
   if (sections.teacherComment && sections.teacherComment.trim()) {
     sourceHTML += `<div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:16px;margin-top:28px;">
