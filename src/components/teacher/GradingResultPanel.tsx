@@ -16,7 +16,7 @@ type GradingResultPanelProps = {
 // trước khi có 2 field này, fallback: nếu examiner_summary có header
 // "### Task N Evaluation:" thì tách theo header; nếu không có header (record
 // cũ chỉ từng chấm 1 task) thì coi cả examiner_summary là của task đang hỏi.
-function resolveTaskSummary(feedback: GradingFeedback, task: "task1" | "task2"): string {
+export function resolveTaskSummary(feedback: GradingFeedback, task: "task1" | "task2"): string {
   const direct = task === "task1" ? feedback.task1_summary : feedback.task2_summary;
   if (direct) return direct;
 
@@ -38,7 +38,7 @@ function resolveTaskSummary(feedback: GradingFeedback, task: "task1" | "task2"):
 // Lọc corrections theo task. Ưu tiên field "task" đã gắn sẵn (dữ liệu mới).
 // Fallback cho record cũ chưa có field này: đoán bằng cách so khớp text gốc
 // của lỗi vào đúng bài làm của task đó.
-function resolveTaskCorrections(feedback: GradingFeedback, task: "task1" | "task2", answerText?: string): Correction[] {
+export function resolveTaskCorrections(feedback: GradingFeedback, task: "task1" | "task2", answerText?: string): Correction[] {
   const all = feedback.corrections ?? [];
   const hasTags = all.some((c) => c.task);
   if (hasTags) return all.filter((c) => c.task === task);
@@ -49,7 +49,7 @@ function resolveTaskCorrections(feedback: GradingFeedback, task: "task1" | "task
 // Hiển thị ĐÚNG giá trị band (band IELTS luôn là bội số 0.5, VD 7, 7.5, 8) —
 // KHÔNG làm tròn về số nguyên, vì Math.round(7.5) = 8 sẽ khiến điểm hiển thị
 // trông cao hơn thực tế, tạo cảm giác mâu thuẫn với overall band ở badge.
-function formatBandScore(score: unknown): string {
+export function formatBandScore(score: unknown): string {
   const n = Number(score);
   if (score === undefined || score === null || Number.isNaN(n)) return String(score ?? "");
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
@@ -129,22 +129,20 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
               <div className="bg-slate-50 px-5 py-3 border-b border-slate-100">
                 <span className="font-bold text-slate-800">Điểm chi tiết</span>
               </div>
-              <div className="p-5">
-                <dl className="space-y-3 text-sm">
-                  {[
-                    { label: "Task Achievement", score: feedback.task1.TA },
-                    { label: "Coherence & Cohesion", score: feedback.task1.CC },
-                    { label: "Lexical Resource", score: feedback.task1.LR },
-                    { label: "Grammar", score: feedback.task1.GRA },
-                  ].map((item, i) => (
-                    <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
-                      <dt className="text-slate-500 font-medium">{item.label}</dt>
-                      <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
-                        {formatBandScore(item.score)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
+                {[
+                  { label: "Task Achievement", short: "TA", score: feedback.task1.TA },
+                  { label: "Coherence & Cohesion", short: "CC", score: feedback.task1.CC },
+                  { label: "Lexical Resource", short: "LR", score: feedback.task1.LR },
+                  { label: "Grammar", short: "GRA", score: feedback.task1.GRA },
+                ].map((item, i) => (
+                  <div key={i} className="p-4 text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400" title={item.label}>
+                      {item.short}
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-slate-900">{formatBandScore(item.score)}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -227,22 +225,20 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
               <div className="bg-slate-50 px-5 py-3 border-b border-slate-100">
                 <span className="font-bold text-slate-800">Điểm chi tiết</span>
               </div>
-              <div className="p-5">
-                <dl className="space-y-3 text-sm">
-                  {[
-                    { label: "Task Response", score: feedback.task2.TR },
-                    { label: "Coherence & Cohesion", score: feedback.task2.CC },
-                    { label: "Lexical Resource", score: feedback.task2.LR },
-                    { label: "Grammar", score: feedback.task2.GRA },
-                  ].map((item, i) => (
-                    <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
-                      <dt className="text-slate-500 font-medium">{item.label}</dt>
-                      <dd className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded text-xs">
-                        {formatBandScore(item.score)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
+                {[
+                  { label: "Task Response", short: "TR", score: feedback.task2.TR },
+                  { label: "Coherence & Cohesion", short: "CC", score: feedback.task2.CC },
+                  { label: "Lexical Resource", short: "LR", score: feedback.task2.LR },
+                  { label: "Grammar", short: "GRA", score: feedback.task2.GRA },
+                ].map((item, i) => (
+                  <div key={i} className="p-4 text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400" title={item.label}>
+                      {item.short}
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-slate-900">{formatBandScore(item.score)}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
