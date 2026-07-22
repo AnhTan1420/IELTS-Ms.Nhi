@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, BookOpen, Check, Clock, Copy, Edit3, Image as ImageIcon, Loader2, Plus, Trash2, UploadCloud } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, Clock, Copy, Edit3, GraduationCap, Image as ImageIcon, Loader2, Plus, Trash2, UploadCloud } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { TestRow } from "@/lib/types";
 import { useTests } from "@/hooks/teacher/useTests";
+import { useClasses } from "@/hooks/teacher/useClasses";
 
 type ExamCreateFormProps = {
   onError: (message: string) => void;
@@ -13,6 +14,7 @@ type ExamCreateFormProps = {
 // Tab "Quản lý đề thi" — ngân hàng đề (danh sách + xóa) và form khởi tạo/chỉnh sửa đề (tạo/upload ảnh).
 export default function ExamCreateForm({ onError }: ExamCreateFormProps) {
   const { tests, loadTests, handleDeleteTest } = useTests(onError);
+  const { classes, loadClasses } = useClasses(onError);
 
   const [editingTest, setEditingTest] = useState<Partial<TestRow> | null>(null);
   const [isSavingTest, setIsSavingTest] = useState(false);
@@ -27,6 +29,7 @@ export default function ExamCreateForm({ onError }: ExamCreateFormProps) {
 
   useEffect(() => {
     void loadTests();
+    void loadClasses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -63,6 +66,7 @@ export default function ExamCreateForm({ onError }: ExamCreateFormProps) {
       task2_prompt: editingTest.task2_prompt || "",
       image_url: editingTest.image_url || null,
       duration_minutes: editingTest.duration_minutes && editingTest.duration_minutes > 0 ? editingTest.duration_minutes : 60,
+      class_id: editingTest.class_id || null,
     };
 
     let responseError = null;
@@ -137,6 +141,9 @@ export default function ExamCreateForm({ onError }: ExamCreateFormProps) {
                 <div className="pl-2 flex items-center gap-4 text-xs font-medium text-slate-500">
                   <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" /> {test.duration_minutes} phút</span>
                   <span className="hidden sm:flex items-center gap-1.5"><BookOpen className="h-3.5 w-3.5" /> Full Test (Task 1 & 2)</span>
+                  <span className={`flex items-center gap-1.5 ${test.classes?.name ? "text-cyan-700" : "text-slate-400"}`}>
+                    <GraduationCap className="h-3.5 w-3.5" /> {test.classes?.name || "Chưa phân lớp"}
+                  </span>
                 </div>
               </div>
             ))}
@@ -197,6 +204,27 @@ export default function ExamCreateForm({ onError }: ExamCreateFormProps) {
                 required
               />
               <p className="text-xs text-slate-400 mt-1.5">Mặc định 60 phút. Học sinh sẽ bị tự động nộp bài khi hết thời gian.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-cyan-600" /> Lớp học
+              </label>
+              <select
+                className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition-all shadow-sm bg-white"
+                value={editingTest.class_id || ""}
+                onChange={(e) => setEditingTest({ ...editingTest, class_id: e.target.value || null })}
+              >
+                <option value="">— Chưa phân lớp —</option>
+                {classes.map((cls) => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.name}
+                  </option>
+                ))}
+              </select>
+              {classes.length === 0 && (
+                <p className="text-xs text-slate-400 mt-1.5">Chưa có lớp học nào. Tạo lớp ở tab "Quản lý lớp học" trước.</p>
+              )}
             </div>
 
             <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-4 shadow-sm">
