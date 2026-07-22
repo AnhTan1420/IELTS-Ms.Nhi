@@ -1,8 +1,8 @@
 "use client";
 
-import { Archive, CheckSquare, Clock, Loader2, ShieldAlert, Sparkles, Square, Trash2 } from "lucide-react";
+import { Archive, CheckSquare, Clock, Loader2, ShieldAlert, Sparkles, Square, Timer, Trash2 } from "lucide-react";
 import type { SubmissionRow } from "@/lib/types";
-import { statusLabels, statusStyles } from "./submission-utils";
+import { statusLabels, statusStyles, formatDateTime, formatDuration } from "./submission-utils";
 
 type SubmissionListProps = {
   submissions: SubmissionRow[];
@@ -135,7 +135,19 @@ export default function SubmissionList({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 line-clamp-1 font-medium mb-3">{submission.tests?.title ?? "Đề đã bị xóa"}</p>
+              <p className="text-xs text-slate-500 line-clamp-1 font-medium mb-1.5">{submission.tests?.title ?? "Đề đã bị xóa"}</p>
+              <div className="flex items-center gap-3 flex-wrap mb-3 text-[10px] font-semibold text-slate-400">
+                {submission.submitted_at && (
+                  <span className="flex items-center gap-1" title="Thời điểm nộp bài">
+                    <Clock className="h-3 w-3" /> {formatDateTime(submission.submitted_at)}
+                  </span>
+                )}
+                {submission.started_at && (
+                  <span className="flex items-center gap-1" title="Thời gian làm bài">
+                    <Timer className="h-3 w-3" /> {formatDuration(submission.started_at, submission.submitted_at)}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${statusStyles[submission.status] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
                   {statusLabels[submission.status] || submission.status}
