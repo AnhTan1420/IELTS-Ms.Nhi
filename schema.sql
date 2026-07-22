@@ -1,12 +1,76 @@
 -- ============================================================================
 -- MIGRATION: Tối ưu index + gộp query thành RPC cho project ieltsmsnhinguyen
 -- Idempotent — chạy lại nhiều lần trong Supabase SQL Editor không lỗi.
--- Dựa trên: schema hiện tại (user cung cấp) + cách src/ đang gọi supabase.
+--
+-- ĐÃ VÁ (2 lỗi):
+--   (a) Bỏ 2 index sai tham chiếu "submissions.class_id" — cột này KHÔNG
+--       tồn tại trên bảng submissions theo đúng thiết kế ở mục (2) bên dưới
+--       (lọc submissions theo lớp qua join tests.class_id, không lưu riêng
+--       trên submissions để tránh out-of-sync).
+--   (b) Đổi THỨ TỰ chạy: mục "tạo bảng classes + thêm cột tests.class_id"
+--       giờ chạy TRƯỚC phần tạo index idx_tests_class_id. Bản trước tạo
+--       index trên tests.class_id ở mục (1) nhưng cột đó chỉ được thêm ở
+--       mục (5) nằm phía dưới -> lần đầu chạy trên DB chưa có cột này sẽ
+--       lỗi 42703 "column class_id does not exist". Postgres chạy tuần tự
+--       từng câu lệnh, không "nhìn trước" các câu phía sau.
 -- ============================================================================
 
 
 -- ----------------------------------------------------------------------------
--- 1) INDEX CHO CÁC CỘT FOREIGN KEY / FILTER / ORDER BY
+-- 1) TÍNH NĂNG "QUẢN LÝ LỚP HỌC" — chạy TRƯỚC vì mục (2) bên dưới cần cột
+-- tests.class_id đã tồn tại để tạo index trên nó.
+--
+-- Tạo bảng classes + cột tests.class_id để giáo viên gắn 1 đề thi vào 1 lớp
+-- học, sau đó tab "Theo dõi & Chấm bài" lọc bài nộp theo lớp (qua đề thi mà
+-- học sinh đã làm). KHÔNG thêm class_id vào bảng submissions — việc phân loại
+-- bài nộp theo lớp lấy trực tiếp từ submissions.tests.class_id (join sẵn có),
+-- không cần cột riêng, tránh out-of-sync khi 1 đề đổi lớp sau khi đã có người nộp.
+-- ----------------------------------------------------------------------------
+
+create table if not exists public.classes (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.tests
+  add column if not exists class_id uuid references public.classes (id) on delete set null;
+
+-- RLS: cùng mô hình mở hiện tại của bảng tests/submissions — mọi giáo viên đã
+-- đăng nhập (authenticated) đều thấy và quản lý được toàn bộ lớp học (chưa
+-- scope theo giáo viên tạo ra lớp đó). Học sinh (anon, không đăng nhập) không
+-- cần và không được đụng tới bảng classes.
+alter table public.classes enable row level security;
+
+drop policy if exists "Authenticated can read classes" on public.classes;
+create policy "Authenticated can read classes"
+  on public.classes for select
+  to authenticated
+  using (true);
+
+drop policy if exists "Authenticated can insert classes" on public.classes;
+create policy "Authenticated can insert classes"
+  on public.classes for insert
+  to authenticated
+  with check (true);
+
+drop policy if exists "Authenticated can update classes" on public.classes;
+create policy "Authenticated can update classes"
+  on public.classes for update
+  to authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "Authenticated can delete classes" on public.classes;
+create policy "Authenticated can delete classes"
+  on public.classes for delete
+  to authenticated
+  using (true);
+
+
+-- ----------------------------------------------------------------------------
+-- 2) INDEX CHO CÁC CỘT FOREIGN KEY / FILTER / ORDER BY
 --
 -- Postgres CHỈ tự tạo index cho PRIMARY KEY, không tự tạo cho cột FK.
 -- Nhìn vào code:
@@ -16,7 +80,7 @@
 --   - useTests.ts        : .order("created_at", desc) trên bảng tests
 --   - mọi route submissions/[id]/*  : .eq("id", id) — đã có PK index sẵn, ok.
 --   - submissions_test_id_fkey, submissions_user_id_fkey, student_id_fkey,
---     class_id_fkey, tests_class_id_fkey, tests_created_by_fkey, warnings_*
+--     tests_class_id_fkey, tests_created_by_fkey, warnings_*
 --     -> chưa có cột nào trong số này được index.
 --
 -- Khi bảng submissions lớn dần (vài nghìn bài trở lên), thiếu index này sẽ
@@ -30,21 +94,24 @@ create index if not exists idx_tests_created_at     on public.tests (created_at 
 create index if not exists idx_submissions_test_id    on public.submissions (test_id);
 create index if not exists idx_submissions_user_id    on public.submissions (user_id);
 create index if not exists idx_submissions_student_id on public.submissions (student_id);
-create index if not exists idx_submissions_class_id   on public.submissions (class_id);
 create index if not exists idx_submissions_status     on public.submissions (status);
 create index if not exists idx_submissions_created_at on public.submissions (created_at desc);
--- composite: hữu ích ngay khi bạn thêm lọc "theo lớp, mới nhất trước" ở UI
-create index if not exists idx_submissions_class_created
-  on public.submissions (class_id, created_at desc);
+-- (KHÔNG tạo index trên submissions.class_id: cột này không tồn tại trên
+--  bảng submissions. Muốn lọc "theo lớp, mới nhất trước" thì join qua
+--  tests.class_id, ví dụ:
+--    select s.* from submissions s join tests t on t.id = s.test_id
+--    where t.class_id = :class_id order by s.created_at desc;
+--  Index idx_tests_class_id ở trên đã đủ hỗ trợ join này.)
 
 create index if not exists idx_warnings_submission_id on public.warnings (submission_id);
 create index if not exists idx_warnings_user_id       on public.warnings (user_id);
 
 create index if not exists idx_classes_created_by on public.classes (created_by);
+create index if not exists idx_classes_created_at on public.classes (created_at desc);
 
 
 -- ----------------------------------------------------------------------------
--- 2) RPC: TĂNG warning_count MỘT CÁCH ATOMIC
+-- 3) RPC: TĂNG warning_count MỘT CÁCH ATOMIC
 --
 -- File src/app/api/submissions/[id]/warning/route.ts hiện làm 2 bước tách
 -- rời: SELECT warning_count -> tính nextCount ở Node -> UPDATE. Nếu anti-cheat
@@ -117,7 +184,7 @@ grant execute on function public.increment_submission_warning(uuid, text, intege
 
 
 -- ----------------------------------------------------------------------------
--- 3) SỬA LẠI CHECK CONSTRAINT warning_count CHO KHỚP THỰC TẾ
+-- 4) SỬA LẠI CHECK CONSTRAINT warning_count CHO KHỚP THỰC TẾ
 --
 -- schema.sql trong repo đang ghi "check (warning_count between 0 and 3)",
 -- nhưng DB thật của bạn (bản user gửi) là "between 0 and 5", và code
@@ -132,12 +199,13 @@ alter table public.submissions
 
 
 -- ----------------------------------------------------------------------------
--- 4) GHI CHÚ — KHÔNG PHẢI SQL CẦN CHẠY, CHỈ ĐỂ BẠN ĐỐI CHIẾU
+-- 5) GHI CHÚ — KHÔNG PHẢI SQL CẦN CHẠY, CHỈ ĐỂ BẠN ĐỐI CHIẾU
 --
--- Các cột sau đã tồn tại trong DB thật nhưng KHÔNG được dùng ở đâu trong
--- src/ hiện tại (grep không ra kết quả): classes (cả bảng), tests.class_id,
--- tests.content, submissions.class_id, submissions.teacher_notes,
+-- Các cột sau tồn tại trong DB thật nhưng KHÔNG được dùng ở đâu trong
+-- src/ hiện tại (grep không ra kết quả): classes (cả bảng, tới khi mục (1)
+-- ở trên chạy), tests.class_id, tests.content, submissions.teacher_notes,
 -- submissions.teacher_band_score, submissions.is_reviewed.
+-- (submissions.class_id KHÔNG tồn tại và KHÔNG nên thêm — xem mục 1.)
 -- Đây là "control debt": DB có sẵn hạ tầng cho tính năng theo lớp + review
 -- 2 lượt (band AI vs band giáo viên chỉnh) nhưng frontend/API chưa hề đọc/ghi
 -- các cột này, và RLS cũng chưa scope theo class_id (mọi giáo viên đã đăng
