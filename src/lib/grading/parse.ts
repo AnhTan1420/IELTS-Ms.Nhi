@@ -80,7 +80,7 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
     raw.task1.GRA = toWholeBand(raw.task1.GRA ?? 1);
 
     const mean = (raw.task1.TA + raw.task1.CC + raw.task1.LR + raw.task1.GRA) / 4;
-    raw.task1.band = toWholeBand(mean);
+    raw.task1.band = toHalfBand(mean);
   }
 
   // 3. CHUẨN HOÁ TASK 2 (ép về số nguyên dương)
@@ -92,7 +92,7 @@ function sanitizeBands(raw: GradingFeedback, taskType: TaskType): GradingFeedbac
     raw.task2.GRA = toWholeBand(raw.task2.GRA ?? 1);
 
     const mean = (raw.task2.TR + raw.task2.CC + raw.task2.LR + raw.task2.GRA) / 4;
-    raw.task2.band = toWholeBand(mean);
+    raw.task2.band = toHalfBand(mean);
   }
 
   // 4. TÍNH TOÁN LẠI OVERALL BAND
