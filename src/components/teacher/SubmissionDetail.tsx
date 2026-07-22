@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Clock,
   Download,
+  Timer,
   FileCheck2,
   FileDown,
   Image as ImageIcon,
@@ -23,7 +24,7 @@ import {
 import type { SubmissionRow } from "@/lib/types";
 import { parseSubmissionContent } from "@/lib/grading/parse";
 import { downloadSubmissionDoc, downloadSubmissionRawText } from "@/lib/teacher/exportDoc";
-import { statusLabels, statusStyles, renderHighlightedAnswer, type Correction } from "./submission-utils";
+import { statusLabels, statusStyles, renderHighlightedAnswer, formatDateTime, formatDuration, type Correction } from "./submission-utils";
 import GradingResultPanel from "./GradingResultPanel";
 
 type SubmissionDetailProps = {
@@ -181,6 +182,25 @@ export default function SubmissionDetail({
                 </div>
                 <span className={`text-xs font-bold px-3 py-1.5 rounded-full border ${statusStyles[selectedSubmission.status] || "bg-slate-50 border-slate-200 text-slate-600"}`}>
                   {statusLabels[selectedSubmission.status] || selectedSubmission.status}
+                </span>
+              </div>
+
+              {/* Thời gian nộp bài + thời gian đã làm bài */}
+              <div className="flex flex-wrap items-center gap-4 mb-4 text-xs font-semibold text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+                  Nộp bài:{" "}
+                  <span className="text-slate-700">
+                    {selectedSubmission.submitted_at ? formatDateTime(selectedSubmission.submitted_at) : "Chưa nộp"}
+                  </span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Timer className="h-3.5 w-3.5 text-slate-400" />
+                  Thời gian làm bài:{" "}
+                  <span className="text-slate-700">
+                    {formatDuration(selectedSubmission.started_at, selectedSubmission.submitted_at)}
+                    {selectedSubmission.status === "in_progress" && " (đang tính...)"}
+                  </span>
                 </span>
               </div>
 
