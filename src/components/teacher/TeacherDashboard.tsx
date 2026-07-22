@@ -1,20 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertTriangle, BookOpen, Bot, ChevronRight, LogOut, Loader2, Radio, Users, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, BookOpen, Bot, ChevronRight, GraduationCap, LogOut, Loader2, Radio, Users, X } from "lucide-react";
 import { useTeacherAuth } from "@/hooks/teacher/useTeacherAuth";
 import { useSubmissions } from "@/hooks/teacher/useSubmissions";
 import { useBulkActions } from "@/hooks/teacher/useBulkActions";
+import { useTests } from "@/hooks/teacher/useTests";
+import { useClasses } from "@/hooks/teacher/useClasses";
 import SubmissionList from "./SubmissionList";
 import SubmissionDetail from "./SubmissionDetail";
 import ExamCreateForm from "./ExamCreateForm";
+import ClassManagement from "./ClassManagement";
 import GradingProgressModal from "./GradingProgressModal";
 
 export default function TeacherDashboard() {
   const { authChecked, isAuthed, handleSignOut } = useTeacherAuth();
-  const [activeTab, setActiveTab] = useState<"submissions" | "tests">("submissions");
+  const [activeTab, setActiveTab] = useState<"submissions" | "tests" | "classes">("submissions");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  // Lớp đang được chọn ở thanh tab lọc trong "Theo dõi & Chấm bài" —
+  // "all" = xem tất cả, "none" = chỉ các bài của đề chưa gắn lớp nào.
+  const [selectedClassId, setSelectedClassId] = useState<string>("all");
 
   // Trên mobile, danh sách bài làm và chi tiết bài làm không thể hiện cùng lúc
   // (không đủ chỗ) — dùng cờ này để chuyển đổi "màn hình" giữa 2 phần, giống
@@ -36,6 +42,36 @@ export default function TeacherDashboard() {
     setSubmissionsError,
   } = useSubmissions(isAuthed);
 
+  // Danh sách lớp học + đề thi — dùng để hiện thanh tab lọc theo lớp ở
+  // "Theo dõi & Chấm bài" và số đề thi/lớp ở tab "Quản lý lớp học".
+  const { classes, loadClasses } = useClasses(setFormError);
+  const { tests, loadTests } = useTests(setFormError);
+
+  useEffect(() => {
+    if (!isAuthed) return;
+    void loadClasses();
+    void loadTests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthed]);
+
+  const testCountByClass = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const test of tests) {
+      if (!test.class_id) continue;
+      counts[test.class_id] = (counts[test.class_id] ?? 0) + 1;
+    }
+    return counts;
+  }, [tests]);
+
+  // Lọc bài nộp theo lớp đang chọn ở thanh tab — phân loại dựa trên lớp của
+  // ĐỀ THI mà bài nộp đó thuộc về (submission.tests.class_id), không cần cột
+  // class_id riêng trên submissions.
+  const filteredSubmissions = useMemo(() => {
+    if (selectedClassId === "all") return submissions;
+    if (selectedClassId === "none") return submissions.filter((s) => !s.tests?.class_id);
+    return submissions.filter((s) => s.tests?.class_id === selectedClassId);
+  }, [submissions, selectedClassId]);
+
   const {
     selectionMode,
     selectedIds,
@@ -48,7 +84,7 @@ export default function TeacherDashboard() {
     handleDownloadAll,
     bulkActionsError,
     setBulkActionsError,
-  } = useBulkActions(submissions, loadSubmissions);
+  } = useBulkActions(filteredSubmissions, loadSubmissions);
 
   const error = submissionsError || bulkActionsError || formError;
   const clearError = () => {
@@ -58,8 +94,8 @@ export default function TeacherDashboard() {
   };
 
   const selectedSubmission = useMemo(
-    () => submissions.find((submission) => submission.id === selectedId) ?? submissions[0],
-    [selectedId, submissions],
+    () => filteredSubmissions.find((submission) => submission.id === selectedId) ?? filteredSubmissions[0],
+    [selectedId, filteredSubmissions],
   );
 
   const handleSelectSubmission = (id: string) => {
@@ -149,6 +185,17 @@ export default function TeacherDashboard() {
             <BookOpen className="h-4 w-4" />
             Quản lý đề thi
           </button>
+          <button
+            onClick={() => setActiveTab("classes")}
+            className={`flex flex-1 items-center justify-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors sm:flex-none ${
+              activeTab === "classes"
+                ? "border-cyan-400 text-white"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <GraduationCap className="h-4 w-4" />
+            Quản lý lớp học
+          </button>
         </div>
       </header>
 
@@ -166,52 +213,97 @@ export default function TeacherDashboard() {
         )}
 
         {activeTab === "submissions" && (
-          <section
-            className={`grid items-start gap-6 ${
-              hasThirdColumn ? "lg:grid-cols-[280px_1fr_260px]" : "lg:grid-cols-[280px_1fr]"
-            }`}
-          >
-            <div className={mobileShowDetail ? "hidden lg:block" : "block"}>
-              <SubmissionList
-                submissions={submissions}
-                selectedId={selectedSubmission?.id ?? null}
-                onSelect={handleSelectSubmission}
-                selectionMode={selectionMode}
-                selectedIds={selectedIds}
-                toggleSelectionMode={toggleSelectionMode}
-                toggleSelectId={toggleSelectId}
-                toggleSelectAll={toggleSelectAll}
-                isBulkDeleting={isBulkDeleting}
-                onBulkDelete={() =>
-                  handleBulkDelete((deletedIds) => {
-                    if (selectedId && deletedIds.includes(selectedId)) setSelectedId(null);
+          <>
+            {/* Thanh tab lọc theo lớp học — chỉ đổi danh sách bài làm hiển thị,
+                UI của SubmissionList/SubmissionDetail bên dưới giữ nguyên. */}
+            {classes.length > 0 && (
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                <button
+                  onClick={() => setSelectedClassId("all")}
+                  className={`shrink-0 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold border transition-colors ${
+                    selectedClassId === "all"
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
+                  }`}
+                >
+                  Tất cả
+                </button>
+                {classes.map((cls) => (
+                  <button
+                    key={cls.id}
+                    onClick={() => setSelectedClassId(cls.id)}
+                    className={`shrink-0 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold border transition-colors ${
+                      selectedClassId === cls.id
+                        ? "bg-cyan-500 text-slate-900 border-cyan-500"
+                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
+                    }`}
+                  >
+                    <GraduationCap className="h-3.5 w-3.5" /> {cls.name}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setSelectedClassId("none")}
+                  className={`shrink-0 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold border transition-colors ${
+                    selectedClassId === "none"
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
+                  }`}
+                >
+                  Chưa phân lớp
+                </button>
+              </div>
+            )}
+
+            <section
+              className={`grid items-start gap-6 ${
+                hasThirdColumn ? "lg:grid-cols-[280px_1fr_260px]" : "lg:grid-cols-[280px_1fr]"
+              }`}
+            >
+              <div className={mobileShowDetail ? "hidden lg:block" : "block"}>
+                <SubmissionList
+                  submissions={filteredSubmissions}
+                  selectedId={selectedSubmission?.id ?? null}
+                  onSelect={handleSelectSubmission}
+                  selectionMode={selectionMode}
+                  selectedIds={selectedIds}
+                  toggleSelectionMode={toggleSelectionMode}
+                  toggleSelectId={toggleSelectId}
+                  toggleSelectAll={toggleSelectAll}
+                  isBulkDeleting={isBulkDeleting}
+                  onBulkDelete={() =>
+                    handleBulkDelete((deletedIds) => {
+                      if (selectedId && deletedIds.includes(selectedId)) setSelectedId(null);
+                    })
+                  }
+                  isDownloadingAll={isDownloadingAll}
+                  onDownloadAll={handleDownloadAll}
+                />
+              </div>
+
+              <SubmissionDetail
+                selectedSubmission={selectedSubmission}
+                isGrading={isGrading}
+                isDeleting={isDeleting}
+                isSavingComment={isSavingComment}
+                showOnMobile={mobileShowDetail}
+                onBack={() => setMobileShowDetail(false)}
+                onGrade={handleGrade}
+                onDeleteSubmission={(submission) =>
+                  handleDeleteSubmission(submission, (id) => {
+                    if (selectedId === id) setSelectedId(null);
                   })
                 }
-                isDownloadingAll={isDownloadingAll}
-                onDownloadAll={handleDownloadAll}
+                onSaveComment={handleSaveComment}
               />
-            </div>
-
-            <SubmissionDetail
-              selectedSubmission={selectedSubmission}
-              isGrading={isGrading}
-              isDeleting={isDeleting}
-              isSavingComment={isSavingComment}
-              showOnMobile={mobileShowDetail}
-              onBack={() => setMobileShowDetail(false)}
-              onGrade={handleGrade}
-              onDeleteSubmission={(submission) =>
-                handleDeleteSubmission(submission, (id) => {
-                  if (selectedId === id) setSelectedId(null);
-                })
-              }
-              onSaveComment={handleSaveComment}
-            />
-          </section>
+            </section>
+          </>
         )}
 
         {/* TAB TẠO ĐỀ THI */}
         {activeTab === "tests" && <ExamCreateForm onError={setFormError} />}
+
+        {/* TAB QUẢN LÝ LỚP HỌC */}
+        {activeTab === "classes" && <ClassManagement onError={setFormError} testCountByClass={testCountByClass} />}
       </div>
 
       <GradingProgressModal isGrading={isGrading} gradingStep={gradingStep} />
@@ -227,9 +319,6 @@ export default function TeacherDashboard() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         html { scrollbar-width: none; -ms-overflow-style: none; }
         html::-webkit-scrollbar { display: none; }
-        @media (min-width: 1024px) {
-          html, body { height: 100%; overflow: hidden; }
-        }
       `}} />
     </main>
   );
