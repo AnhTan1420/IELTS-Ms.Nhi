@@ -111,6 +111,24 @@ export async function POST(request: Request) {
           ...filterTrivialCorrections(fb1.corrections || []).map((c: any) => ({ ...c, task: "task1" as const })),
           ...filterTrivialCorrections(fb2.corrections || []).map((c: any) => ({ ...c, task: "task2" as const })),
         ],
+        // 5 field dưới đây từng bị bỏ sót hoàn toàn khi gộp kết quả "both"
+        // (feedback1/feedback2 đều có nhưng không được copy sang) — AI vẫn tốn
+        // token sinh ra nhưng dữ liệu chưa từng được lưu/hiển thị. Giữ lại,
+        // gắn "task" như "corrections" để UI lọc đúng theo từng task.
+        vocabulary_suggestions: [
+          ...(fb1.vocabulary_suggestions || []).map((v: any) => ({ ...v, task: "task1" as const })),
+          ...(fb2.vocabulary_suggestions || []).map((v: any) => ({ ...v, task: "task2" as const })),
+        ],
+        advanced_structures: [
+          ...(fb1.advanced_structures || []).map((s: any) => ({ ...s, task: "task1" as const })),
+          ...(fb2.advanced_structures || []).map((s: any) => ({ ...s, task: "task2" as const })),
+        ],
+        task1_golden_rule: fb1.golden_rule,
+        task2_golden_rule: fb2.golden_rule,
+        task1_band_progression: fb1.band_progression,
+        task2_band_progression: fb2.band_progression,
+        task1_edited_essay_markdown: fb1.edited_essay_markdown,
+        task2_edited_essay_markdown: fb2.edited_essay_markdown,
       };
     } else {
       if (!testPrompt) {
@@ -139,11 +157,23 @@ export async function POST(request: Request) {
         ...raw,
         overall_band: computedBand,
         corrections: filterTrivialCorrections(raw.corrections || []).map((c: any) => ({ ...c, task: taskType })),
+        vocabulary_suggestions: (raw.vocabulary_suggestions || []).map((v: any) => ({ ...v, task: taskType })),
+        advanced_structures: (raw.advanced_structures || []).map((s: any) => ({ ...s, task: taskType })),
         task1: taskType === "task1" ? taskScoreObject : null,
         task2: taskType === "task2" ? taskScoreObject : null,
         ...(taskType === "task1"
-          ? { task1_summary: raw.examiner_summary }
-          : { task2_summary: raw.examiner_summary }),
+          ? {
+              task1_summary: raw.examiner_summary,
+              task1_golden_rule: raw.golden_rule,
+              task1_band_progression: raw.band_progression,
+              task1_edited_essay_markdown: raw.edited_essay_markdown,
+            }
+          : {
+              task2_summary: raw.examiner_summary,
+              task2_golden_rule: raw.golden_rule,
+              task2_band_progression: raw.band_progression,
+              task2_edited_essay_markdown: raw.edited_essay_markdown,
+            }),
       };
     }
 
