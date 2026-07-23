@@ -11,7 +11,8 @@ export const TASK_CONFIG = {
     promptAnalysis: `## PHÂN TÍCH ĐỀ (TA Pre-check)
 - Xác định đây là Academic Task 1 (report mô tả biểu đồ/bảng/quy trình/bản đồ) hay GT Task 1 (letter — nêu rõ mục đích thư: khiếu nại/xin việc/hỏi thông tin...).
 - Nêu ngắn gọn: xu hướng/mục đích chính (bắt buộc có trong overview hoặc phần mở đầu thư).
-- Các đặc điểm nổi bật cần so sánh/đề cập, số liệu hoặc yêu cầu (bullet points nếu là GT) không được bỏ sót.`,
+- Các đặc điểm nổi bật cần so sánh/đề cập, số liệu hoặc yêu cầu (bullet points nếu là GT) không được bỏ sót.
+- Với Academic Task 1: bài CHỈ được mô tả/báo cáo dữ liệu khách quan, KHÔNG được nêu ý kiến cá nhân, suy đoán nguyên nhân không có trong biểu đồ, hay đưa ra khuyến nghị (những việc này thuộc về Task 2). Nếu học sinh chêm quan điểm cá nhân kiểu "I think this is beneficial for society" hoặc suy đoán nguyên nhân/hệ quả không thể suy ra từ số liệu, đây là lỗi Task Achievement thật sự — phải nêu rõ trong "examiner_summary".`,
     currentBandNote:
       "Overview/đoạn mở có nêu rõ xu hướng chính hoặc mục đích thư không? Các đặc điểm nổi bật đã được chọn lọc & so sánh (không phải chỉ liệt kê số liệu), hoặc với GT: đủ 3 bullet points, đúng tone (formal/informal/semi-formal)?",
   },
@@ -30,7 +31,8 @@ Bước 1 — BẮT BUỘC xác định ĐÚNG dạng câu hỏi Task 2 trước
 - Two-part/Direct questions
 - Đề hỗn hợp (kết hợp ≥2 dạng trên)
 Bước 2 — Nêu ngắn gọn: chủ đề chính, các phần của câu hỏi cần giải quyết theo đúng dạng đề đã xác định, lập trường cá nhân được yêu cầu (nếu có).
-Bước 3 — Nếu bài làm KHÔNG tuân theo đúng cấu trúc dạng đề (VD: đề yêu cầu "Discuss both views" nhưng học sinh chỉ viết một phía; đề "Advantages/Disadvantages" nhưng học sinh lại nêu ý kiến đồng ý/không đồng ý), đây là lỗi TR nghiêm trọng, PHẢI nêu rõ.`,
+Bước 3 — Nếu bài làm KHÔNG tuân theo đúng cấu trúc dạng đề (VD: đề yêu cầu "Discuss both views" nhưng học sinh chỉ viết một phía; đề "Advantages/Disadvantages" nhưng học sinh lại nêu ý kiến đồng ý/không đồng ý), đây là lỗi TR nghiêm trọng, PHẢI nêu rõ.
+Bước 4 — Kiểm tra câu mở đầu (background statement) có thực sự PARAPHRASE đề bài (dùng từ đồng nghĩa/cấu trúc câu khác) hay chỉ chép gần nguyên văn — chép nguyên văn không được tính là "own words" theo band descriptor và ảnh hưởng LR.`,
     currentBandNote:
       "Bài đã giải quyết đủ TẤT CẢ các phần câu hỏi chưa? Lập trường có rõ ràng, nhất quán xuyên suốt không? Ý tưởng có được mở rộng bằng ví dụ/giải thích cụ thể hay chỉ khẳng định suông?",
   },
@@ -157,6 +159,14 @@ Tuyệt đối KHÔNG sử dụng các câu văn sáo rỗng, thảo mai. BẠN 
 ${t.promptAnalysis}
 ${taskType === "task1" ? buildImageCrossCheckBlock(Boolean(opts?.hasImage)) : ""}
 
+🎯 KHUNG THAM CHIẾU BAND (CALIBRATION ANCHOR) — dùng để tự đối chiếu, KHÔNG lạm phát điểm:
+- Band 5: lỗi xuất hiện nhiều khiến người đọc phải gắng sức mới hiểu; câu phức hiếm khi xuất hiện và thường sai; ý tưởng lặp lại hoặc thiếu triển khai.
+- Band 6: hiểu được nội dung nhưng lỗi ngữ pháp/từ vựng vẫn xuất hiện ĐỀU ĐẶN (thường xuyên, không phải hiếm gặp), đặc biệt ở câu phức; ý tưởng có triển khai nhưng chưa đều/chưa sâu giữa các đoạn.
+- Band 7: lỗi ít và không gây khó hiểu; dùng được đa dạng cấu trúc phức khá tự nhiên; ý tưởng phát triển rõ ràng, logic, có ví dụ cụ thể cho từng luận điểm.
+- Band 8: lỗi hiếm gặp và chỉ mang tính "slip" (lỡ tay, không hệ thống); cấu trúc câu đa dạng, tự nhiên; lập luận sâu sắc, không câu nào lạc đề hay thừa.
+⛔ CHỐNG LẠM PHÁT ĐIỂM GRA (nghiêm ngặt): Nếu bạn tự liệt kê ≥8 lỗi ngữ pháp/cấu trúc câu THẬT SỰ trong "corrections" (không tính lỗi chính tả đơn thuần), GRA KHÔNG được vượt Band 6.0 — dù từ vựng hay đến đâu, vì đây đúng là mô tả "lỗi xuất hiện thường xuyên" của Band 6, không phải Band 7+. Nếu lỗi ít hơn nhưng vẫn xuất hiện đều đặn (không phải slip hiếm gặp), GRA tối đa 6.5-7.0. Chỉ chấm GRA ≥7.5 khi lỗi thực sự hiếm và không mang tính hệ thống (lặp đi lặp lại cùng 1 loại).
+🔍 PHÁT HIỆN NGÔN NGỮ SÁO RỖNG (formulaic phrasing — ảnh hưởng LR riêng, KHÁC với nhánh "văn mẫu học thuộc lòng" TA/TR ở dưới): nếu bài dùng các cụm mở/kết sáo mòn một cách máy móc dù phần còn lại của bài KHÔNG đến mức bị nghi là chép văn mẫu (VD: "In today's modern world, it is a matter of great debate that...", "To sum up, it is crystal clear that..."), giới hạn LR không vượt Band 6.5 cho phần này TRỪ KHI phần còn lại của bài thể hiện rõ vốn từ linh hoạt, đúng ngữ cảnh.
+
 ⚠️ NHÁNH XỬ LÝ ĐẦU VÀO BẤT THƯỜNG (kiểm tra TRƯỚC khi chấm điểm):
 - Nếu nội dung nộp vào rõ ràng KHÔNG phải bài làm (ví dụ: học sinh dán nhầm đề bài, dán hướng dẫn, hoặc văn bản không liên quan gì đến chủ đề đề bài), KHÔNG được cố chấm điểm như bình thường. Thay vào đó, đặt "overall_band": 0, để "task1"/"task2" (tuỳ loại) với các tiêu chí = 0, và giải thích rõ lý do trong "examiner_summary".
 - Nếu bài quá ngắn để đánh giá công bằng (dưới khoảng 1/3 số từ tối thiểu yêu cầu), vẫn chấm nhưng "examiner_summary" PHẢI nêu rõ đây là đánh giá dựa trên phần bài rất ngắn, độ tin cậy của điểm số bị hạn chế, và áp mức phạt TA/TR + CC theo band descriptor thật (không du di).
@@ -200,6 +210,7 @@ TUYỆT ĐỐI CẤM sử dụng các câu nhận xét sáo rỗng, mang tính b
 
 7. Band số nguyên/nửa điểm (1.0–9.0, bước 0.5) cho từng tiêu chí (${t.criterionLabel}/${t.criterionKey}, CC, LR, GRA).
 8. "overall_band" = trung bình cộng 4 tiêu chí, làm tròn theo quy tắc IELTS thật: phần thập phân .25 → làm tròn lên .5; phần thập phân .75 → làm tròn lên nguyên tiếp theo; .0 và .5 giữ nguyên. (VD: trung bình 6.75 → overall 7.0; trung bình 6.25 → overall 6.5; trung bình 6.5 → giữ 6.5). Giá trị "band" bên trong object "${taskType}" PHẢI BẰNG CHÍNH XÁC "overall_band" — đây là hai cách gọi tên cho cùng một con số, không được lệch nhau.
+8b. TỰ ĐỐI CHIẾU TRƯỚC KHI CHỐT ĐIỂM (BẮT BUỘC): với MỖI tiêu chí vừa chấm, tự hỏi "Band này tôi vừa cho có thực sự khớp với mô tả ở KHUNG THAM CHIẾU BAND phía trên không, hay tôi đang chấm cao hơn thực tế chỉ vì cảm giác bài 'trông ổn'?". Nếu không chắc chắn khớp hoàn toàn với mô tả của band đó, hạ xuống band liền kề thấp hơn. Đặc biệt cảnh giác với việc chấm GRA/LR cao chỉ vì bài dùng được vài từ vựng khó trong khi mắc nhiều lỗi hệ thống — band descriptor thật luôn ưu tiên ĐỘ CHÍNH XÁC/NHẤT QUÁN hơn là "có vài điểm nhấn".
 9. Chỉ đưa lộ trình lên Band 8.0/9.0 nếu điểm hiện tại đã ≥7.0. Ngược lại chỉ nhắm band kế tiếp (+0.5).
 9b. CHỐNG CHẤM ẢO Ở BAND CAO (Band Inflation Guard): Band 8.0-9.0 CHỈ dành cho bài có độ chính xác gần như tuyệt đối, từ vựng/cấu trúc tự nhiên như người viết thành thạo, lập luận phát triển sâu và tinh tế. Nếu bài còn ≥3 lỗi ngữ pháp/collocation thật sự (trong "corrections") hoặc lập luận còn đơn giản/thiếu chiều sâu, KHÔNG được chấm bất kỳ tiêu chí nào ≥8.0. Trước khi chốt band ≥8.0 cho một tiêu chí, tự hỏi: "Nếu một giám khảo IELTS thật đọc bài này, họ có thực sự tin đây là band 8-9, hay chỉ là một bài band 6-7 khá tốt?" — nếu còn nghi ngờ, hạ xuống band an toàn hơn.
 10. Với mỗi mục trong "corrections", gắn đúng 1 giá trị "criterion" thuộc {"CC","GRA","LR","${t.criterionKey}"} cho biết lỗi này ảnh hưởng chủ yếu tiêu chí nào.
