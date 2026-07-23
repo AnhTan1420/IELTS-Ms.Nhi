@@ -41,6 +41,24 @@ export function formatDuration(startedAt?: string | null, endedAt?: string | nul
   return `${seconds} giây`;
 }
 
+/**
+ * Hiện "vừa xong" / "X giây trước" / "X phút trước" so với mốc `now` truyền vào
+ * (thường lấy từ hook useNow() để tự nhảy số mỗi giây). Dùng cho nhãn cạnh
+ * badge LIVE để giáo viên thấy dữ liệu đang thật sự chảy về theo thời gian thực.
+ */
+export function formatRelativeTime(iso: string | number | null | undefined, now: number): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffSeconds = Math.max(0, Math.floor((now - then) / 1000));
+  if (diffSeconds < 5) return "vừa xong";
+  if (diffSeconds < 60) return `${diffSeconds} giây trước`;
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes} phút trước`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  return `${diffHours} giờ trước`;
+}
+
 /** Đếm số từ đơn giản (tách theo khoảng trắng), dùng cho khối "Thống kê từ" */
 export function countWords(text?: string | null): number {
   if (!text) return 0;
@@ -50,36 +68,14 @@ export function countWords(text?: string | null): number {
 }
 
 /** Đếm số correction có "original" xuất hiện trong đoạn text cho trước — dùng để tách thống kê lỗi theo từng Task */
-function escapeRegExp(string: string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function buildFlexWhitespaceRegex(original: string) {
-  const escaped = escapeRegExp(original.trim());
-  // Bất kỳ chuỗi khoảng trắng nào trong original đều có thể khớp với chuỗi khoảng trắng trong text
-  const pattern = escaped.replace(/\\s+/g, "\\s+").replace(/\s+/g, "\\s+");
-  return new RegExp(pattern, "i");
-}
-
 export function countMatchedCorrections(text: string | undefined | null, corrections: { original: string }[]): number {
   if (!text || !corrections || corrections.length === 0) return 0;
   let count = 0;
   for (const c of corrections) {
     if (!c?.original) continue;
-    
-    // Check exact first
     let idx = text.indexOf(c.original);
     if (idx === -1) idx = text.toLowerCase().indexOf(c.original.toLowerCase());
-    
-    if (idx !== -1) {
-      count++;
-    } else {
-      // Fallback: regex search
-      const regex = buildFlexWhitespaceRegex(c.original);
-      if (regex.test(text)) {
-        count++;
-      }
-    }
+    if (idx !== -1) count++;
   }
   return count;
 }
@@ -105,27 +101,12 @@ export function renderHighlightedAnswer(
 
   for (const correction of corrections) {
     if (!correction?.original) continue;
-    
-    // Tìm chính xác trước
     let idx = text.indexOf(correction.original);
     if (idx === -1) {
       idx = text.toLowerCase().indexOf(correction.original.toLowerCase());
     }
-    
-    if (idx !== -1) {
-      matches.push({ start: idx, end: idx + correction.original.length, correction });
-    } else {
-      // Nếu không tìm thấy, dùng regex linh hoạt 
-      const regex = buildFlexWhitespaceRegex(correction.original);
-      const match = text.match(regex);
-      if (match && match.index !== undefined) {
-        matches.push({
-          start: match.index,
-          end: match.index + match[0].length,
-          correction
-        });
-      }
-    }
+    if (idx === -1) continue;
+    matches.push({ start: idx, end: idx + correction.original.length, correction });
   }
 
   if (matches.length === 0) return text;
