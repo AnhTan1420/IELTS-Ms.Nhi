@@ -30,7 +30,12 @@ export async function getAuthenticatedUser(request: Request): Promise<User | nul
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const { data, error } = await supabaseAuthClient.auth.getUser(token);
+  const { data, error } = await supabaseAuthClient.auth.getUser(token).catch((err) => {
+    // Phòng trường hợp hiếm gặp getUser() ném lỗi thay vì trả về { error }
+    // (ví dụ lỗi liên quan tới lệch giờ đồng hồ khi xác minh claim của JWT).
+    console.error("getAuthenticatedUser: getUser() ném lỗi bất ngờ:", err);
+    return { data: { user: null }, error: err };
+  });
   if (error || !data.user) return null;
 
   return data.user;
