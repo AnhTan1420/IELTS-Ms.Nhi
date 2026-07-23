@@ -8,7 +8,15 @@ export default function AuthStatus() {
   const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
+    supabase.auth
+      .getUser()
+      .then(({ data }) => setEmail(data.user?.email ?? null))
+      .catch((err) => {
+        // Ví dụ lỗi "JWT issued at future" do đồng hồ thiết bị lệch giờ.
+        // Coi như chưa đăng nhập thay vì để lỗi rơi ra ngoài làm crash trang.
+        console.error("Không xác thực được phiên đăng nhập:", err);
+        setEmail(null);
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setEmail(session?.user.email ?? null);
@@ -18,7 +26,11 @@ export default function AuthStatus() {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Đăng xuất gặp lỗi (bỏ qua):", err);
+    }
     setEmail(null);
   };
 
