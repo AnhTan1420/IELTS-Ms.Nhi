@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, BookOpen, Bot, Image as ImageIcon, Sparkles, Type } from "lucide-react";
-import type { Correction, GradingFeedback } from "@/lib/types";
+import { useState } from "react";
+import { AlertTriangle, BookOpen, Bot, ChevronDown, Compass, Image as ImageIcon, Languages, Lightbulb, Sparkles, Type, Wand2 } from "lucide-react";
+import type { AdvancedStructure, BandProgression, Correction, GradingFeedback, VocabularySuggestion } from "@/lib/types";
 import { countWords } from "./submission-utils";
 import ExaminerSummaryCard from "./ExaminerSummaryCard";
 
@@ -46,6 +47,48 @@ export function resolveTaskCorrections(feedback: GradingFeedback, task: "task1" 
   return all.filter((c) => answerText.includes(c.original));
 }
 
+// Task nào đang là "task đơn lẻ" của feedback này — dùng để fallback các field
+// cũ (chưa tách theo task, lưu trước khi route.ts được vá) về đúng task đang
+// hiển thị. Khi feedback có CẢ task1 lẫn task2 (chấm "both"), field cũ không
+// đáng tin (chỉ còn của lần gọi cuối), nên KHÔNG fallback trong trường hợp đó.
+function soloTaskOf(feedback: GradingFeedback): "task1" | "task2" | null {
+  if (feedback.task1 && !feedback.task2) return "task1";
+  if (feedback.task2 && !feedback.task1) return "task2";
+  return null;
+}
+
+export function resolveTaskGoldenRule(feedback: GradingFeedback, task: "task1" | "task2"): string | undefined {
+  const direct = task === "task1" ? feedback.task1_golden_rule : feedback.task2_golden_rule;
+  if (direct) return direct;
+  return feedback.golden_rule && soloTaskOf(feedback) === task ? feedback.golden_rule : undefined;
+}
+
+export function resolveTaskBandProgression(feedback: GradingFeedback, task: "task1" | "task2"): BandProgression | undefined {
+  const direct = task === "task1" ? feedback.task1_band_progression : feedback.task2_band_progression;
+  if (direct) return direct;
+  return feedback.band_progression && soloTaskOf(feedback) === task ? feedback.band_progression : undefined;
+}
+
+export function resolveTaskEditedEssay(feedback: GradingFeedback, task: "task1" | "task2"): string | undefined {
+  const direct = task === "task1" ? feedback.task1_edited_essay_markdown : feedback.task2_edited_essay_markdown;
+  if (direct) return direct;
+  return feedback.edited_essay_markdown && soloTaskOf(feedback) === task ? feedback.edited_essay_markdown : undefined;
+}
+
+export function resolveTaskVocabulary(feedback: GradingFeedback, task: "task1" | "task2"): VocabularySuggestion[] {
+  const all = feedback.vocabulary_suggestions ?? [];
+  const hasTags = all.some((v) => v.task);
+  if (hasTags) return all.filter((v) => v.task === task);
+  return soloTaskOf(feedback) === task ? all : [];
+}
+
+export function resolveTaskAdvancedStructures(feedback: GradingFeedback, task: "task1" | "task2"): AdvancedStructure[] {
+  const all = feedback.advanced_structures ?? [];
+  const hasTags = all.some((s) => s.task);
+  if (hasTags) return all.filter((s) => s.task === task);
+  return soloTaskOf(feedback) === task ? all : [];
+}
+
 // Hiển thị ĐÚNG giá trị band (band IELTS luôn là bội số 0.5, VD 7, 7.5, 8) —
 // KHÔNG làm tròn về số nguyên, vì Math.round(7.5) = 8 sẽ khiến điểm hiển thị
 // trông cao hơn thực tế, tạo cảm giác mâu thuẫn với overall band ở badge.
@@ -55,12 +98,121 @@ export function formatBandScore(score: unknown): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
+type TaskExtrasProps = {
+  goldenRule?: string;
+  bandProgression?: BandProgression;
+  vocabulary: VocabularySuggestion[];
+  advancedStructures: AdvancedStructure[];
+  editedEssay?: string;
+};
+
+// Gom 4 mảnh phản hồi vốn đang bị AI sinh ra rồi bỏ xó (golden rule, lộ trình
+// lên band, bảng nâng cấp từ vựng, cấu trúc nâng cao, bài viết mẫu đã sửa) —
+// hiển thị riêng cho 1 task. Không render section nào nếu dữ liệu rỗng, để
+// không vỡ layout với các submission cũ chưa có mấy field này.
+function TaskExtras({ goldenRule, bandProgression, vocabulary, advancedStructures, editedEssay }: TaskExtrasProps) {
+  const [showEditedEssay, setShowEditedEssay] = useState(false);
+
+  const hasAnything = goldenRule || bandProgression || vocabulary.length > 0 || advancedStructures.length > 0 || editedEssay;
+  if (!hasAnything) return null;
+
+  return (
+    <div className="space-y-5">
+      {goldenRule && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <div className="shrink-0 bg-amber-100 p-1.5 rounded-lg"><Lightbulb className="h-4 w-4 text-amber-600" /></div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-0.5">Nguyên tắc vàng</p>
+            <p className="text-sm text-slate-700 font-medium leading-relaxed">{goldenRule}</p>
+          </div>
+        </div>
+      )}
+
+      {bandProgression && (
+        <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+            <Compass className="h-4 w-4 text-cyan-600" />
+            <span className="font-bold text-slate-800">Lộ trình lên band</span>
+          </div>
+          <div className="p-5 space-y-3 text-sm">
+            <p><span className="font-bold text-slate-700">Vì sao đang ở band này: </span><span className="text-slate-600">{bandProgression.why_current}</span></p>
+            <p><span className="font-bold text-slate-700">Vì sao chưa thấp hơn: </span><span className="text-slate-600">{bandProgression.why_not_lower}</span></p>
+            <p><span className="font-bold text-slate-700">Vì sao chưa cao hơn: </span><span className="text-slate-600">{bandProgression.why_not_higher}</span></p>
+            {bandProgression.roadmap_steps?.length > 0 && (
+              <div className="pt-2">
+                <p className="font-bold text-slate-700 mb-1.5">Việc cần làm tiếp theo:</p>
+                <ul className="space-y-1.5">
+                  {bandProgression.roadmap_steps.map((step, i) => (
+                    <li key={i} className="flex gap-2 text-slate-600">
+                      <span className="text-cyan-500 font-bold">{i + 1}.</span> {step}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {vocabulary.length > 0 && (
+        <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+            <Languages className="h-4 w-4 text-cyan-600" />
+            <span className="font-bold text-slate-800">Nâng cấp từ vựng</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {vocabulary.map((v, i) => (
+              <div key={i} className="p-4 grid grid-cols-1 sm:grid-cols-[1fr_1fr_1.4fr] gap-2 sm:gap-4 items-start">
+                <span className="text-sm text-red-600 line-through decoration-red-300/60">{v.original_word}</span>
+                <span className="text-sm font-bold text-emerald-700">{v.better_alternative}</span>
+                <span className="text-sm text-slate-500">{v.reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {advancedStructures.length > 0 && (
+        <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+            <Wand2 className="h-4 w-4 text-cyan-600" />
+            <span className="font-bold text-slate-800">Cấu trúc nâng cao gợi ý</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {advancedStructures.map((s, i) => (
+              <div key={i} className="p-4 space-y-1">
+                <p className="text-xs font-bold uppercase tracking-wide text-cyan-700">{s.structure_name}</p>
+                <p className="text-sm text-slate-800 italic">{s.example_sentence_en}</p>
+                <p className="text-sm text-slate-500">{s.explanation_vi}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {editedEssay && (
+        <div className="rounded-2xl bg-white border border-slate-200/60 shadow-sm overflow-hidden">
+          <button
+            onClick={() => setShowEditedEssay((v) => !v)}
+            className="w-full bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-2 text-left"
+          >
+            <span className="font-bold text-slate-800">Bài viết mẫu đã chỉnh sửa</span>
+            <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showEditedEssay ? "rotate-180" : ""}`} />
+          </button>
+          {showEditedEssay && (
+            <div className="p-5 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{editedEssay}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GradingResultPanel({ feedback, task1Answer, task2Answer }: GradingResultPanelProps) {
   const task1Summary = feedback.task1 ? resolveTaskSummary(feedback, "task1") : null;
   const task2Summary = feedback.task2 ? resolveTaskSummary(feedback, "task2") : null;
   const task1Corrections = feedback.task1 ? resolveTaskCorrections(feedback, "task1", task1Answer) : [];
   const task2Corrections = feedback.task2 ? resolveTaskCorrections(feedback, "task2", task2Answer) : [];
-
   return (
     <div className="mt-8 rounded-3xl border border-cyan-200/60 bg-gradient-to-br from-cyan-50/80 to-white overflow-hidden shadow-sm">
       <div className="p-6 border-b border-cyan-100 bg-white/50 backdrop-blur-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -171,6 +323,14 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
                 </div>
               </div>
             )}
+
+            <TaskExtras
+              goldenRule={resolveTaskGoldenRule(feedback, "task1")}
+              bandProgression={resolveTaskBandProgression(feedback, "task1")}
+              vocabulary={resolveTaskVocabulary(feedback, "task1")}
+              advancedStructures={resolveTaskAdvancedStructures(feedback, "task1")}
+              editedEssay={resolveTaskEditedEssay(feedback, "task1")}
+            />
           </div>
         )}
 
@@ -267,6 +427,14 @@ export default function GradingResultPanel({ feedback, task1Answer, task2Answer 
                 </div>
               </div>
             )}
+
+            <TaskExtras
+              goldenRule={resolveTaskGoldenRule(feedback, "task2")}
+              bandProgression={resolveTaskBandProgression(feedback, "task2")}
+              vocabulary={resolveTaskVocabulary(feedback, "task2")}
+              advancedStructures={resolveTaskAdvancedStructures(feedback, "task2")}
+              editedEssay={resolveTaskEditedEssay(feedback, "task2")}
+            />
           </div>
         )}
       </div>
