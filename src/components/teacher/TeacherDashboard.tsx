@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BookOpen, Bot, ChevronRight, GraduationCap, LogOut, Loader2, Radio, Users, X } from "lucide-react";
 import { useTeacherAuth } from "@/hooks/teacher/useTeacherAuth";
+import { useNow } from "@/hooks/useNow";
+import { formatRelativeTime } from "./submission-utils";
 import { useSubmissions } from "@/hooks/teacher/useSubmissions";
 import { useBulkActions } from "@/hooks/teacher/useBulkActions";
 import { useTests } from "@/hooks/teacher/useTests";
@@ -22,6 +24,10 @@ export default function TeacherDashboard() {
   // "all" = xem tất cả, "none" = chỉ các bài của đề chưa gắn lớp nào.
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
 
+  // Tick mỗi giây để nhãn "cập nhật lần cuối X trước" cạnh trạng thái realtime
+  // tự nhảy số dù không có event mới nào — chỉ ảnh hưởng UI, không gọi mạng.
+  const now = useNow();
+
   // Trên mobile, danh sách bài làm và chi tiết bài làm không thể hiện cùng lúc
   // (không đủ chỗ) — dùng cờ này để chuyển đổi "màn hình" giữa 2 phần, giống
   // điều hướng master-detail quen thuộc trên app di động. Trên desktop (lg+)
@@ -40,6 +46,8 @@ export default function TeacherDashboard() {
     handleSaveComment,
     submissionsError,
     setSubmissionsError,
+    realtimeStatus,
+    lastRealtimeEventAt,
   } = useSubmissions(isAuthed);
 
   // Danh sách lớp học + đề thi — dùng để hiện thanh tab lọc theo lớp ở
@@ -147,8 +155,24 @@ export default function TeacherDashboard() {
             </div>
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold leading-tight text-white sm:text-lg">Teacher Workspace</h1>
-              <p className="hidden truncate text-xs text-slate-400 sm:block">
-                Quản lý đề thi và theo dõi bài làm học viên theo thời gian thực.
+              <p className="hidden items-center gap-1.5 truncate text-xs text-slate-400 sm:flex">
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    realtimeStatus === "connected"
+                      ? "animate-pulse bg-emerald-400"
+                      : realtimeStatus === "error"
+                        ? "bg-red-400"
+                        : "bg-slate-500"
+                  }`}
+                />
+                {realtimeStatus === "connected"
+                  ? "Đã kết nối realtime — bài làm & cảnh báo cập nhật tức thời"
+                  : realtimeStatus === "error"
+                    ? "Mất kết nối realtime — đang thử lại..."
+                    : "Đang kết nối realtime..."}
+                {realtimeStatus === "connected" && lastRealtimeEventAt && (
+                  <span className="text-slate-500"> · cập nhật lần cuối {formatRelativeTime(lastRealtimeEventAt, now)}</span>
+                )}
               </p>
             </div>
           </div>
