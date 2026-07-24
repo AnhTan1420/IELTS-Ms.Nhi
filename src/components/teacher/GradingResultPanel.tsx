@@ -193,8 +193,10 @@ function TaskExtras({ goldenRule, bandProgression, vocabulary, advancedStructure
             {advancedStructures.map((s, i) => (
               <div key={i} className="p-4 space-y-1">
                 <p className="text-xs font-bold uppercase tracking-wide text-cyan-700">{s.structure_name}</p>
-                {s.original_sentence && (
+                {s.original_sentence ? (
                   <p className="text-sm text-slate-400 line-through decoration-slate-300">{s.original_sentence}</p>
+                ) : (
+                  <p className="text-[11px] font-semibold text-slate-400 italic">Gợi ý tổng hợp — không nâng cấp từ 1 câu cụ thể nào</p>
                 )}
                 <p className="text-sm text-slate-800 italic">
                   <mark className="bg-emerald-200/70 text-slate-900 rounded-sm px-0.5">{s.example_sentence_en}</mark>
