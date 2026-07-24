@@ -439,7 +439,7 @@ export default function SubmissionDetail({
 
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Bài làm học sinh</p>
-                            <div className="whitespace-pre-wrap font-serif text-[15px] leading-[2] bg-[#fcfcfc] border border-slate-200 rounded-xl px-4 sm:px-6 py-6 text-slate-800 tracking-wide selection:bg-cyan-200 min-h-[120px]">
+                            <div className="whitespace-pre-wrap font-serif text-[15px] leading-[2] bg-[#fcfcfc] border border-slate-200 rounded-xl px-4 sm:px-6 py-6 text-slate-800 tracking-wide selection:bg-cyan-200 min-h-[120px] max-w-[70ch] mx-auto">
                               {parsedContent.task1Answer ? (
                                 renderHighlightedAnswer(
                                   parsedContent.task1Answer,
@@ -503,7 +503,7 @@ export default function SubmissionDetail({
 
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Bài làm học sinh</p>
-                            <div className="whitespace-pre-wrap font-serif text-[15px] leading-[2] bg-[#fcfcfc] border border-slate-200 rounded-xl px-4 sm:px-6 py-6 text-slate-800 tracking-wide selection:bg-cyan-200 min-h-[120px]">
+                            <div className="whitespace-pre-wrap font-serif text-[15px] leading-[2] bg-[#fcfcfc] border border-slate-200 rounded-xl px-4 sm:px-6 py-6 text-slate-800 tracking-wide selection:bg-cyan-200 min-h-[120px] max-w-[70ch] mx-auto">
                               {parsedContent.task2Answer ? (
                                 renderHighlightedAnswer(
                                   parsedContent.task2Answer,

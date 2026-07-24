@@ -28,6 +28,12 @@ export default function TeacherDashboard() {
   // tự nhảy số dù không có event mới nào — chỉ ảnh hưởng UI, không gọi mạng.
   const now = useNow();
 
+  // Chấm trạng thái realtime chỉ nhấp nháy TRONG CHỐC LÁT khi vừa có sự kiện
+  // mới, thay vì animate-pulse liên tục suốt cả ngày khi đã "connected" —
+  // nhấp nháy vô thời hạn là chuyển động nền gây mỏi mắt/mất tập trung khi
+  // giáo viên nhìn màn hình nhiều giờ liền.
+  const [justUpdated, setJustUpdated] = useState(false);
+
   // Trên mobile, danh sách bài làm và chi tiết bài làm không thể hiện cùng lúc
   // (không đủ chỗ) — dùng cờ này để chuyển đổi "màn hình" giữa 2 phần, giống
   // điều hướng master-detail quen thuộc trên app di động. Trên desktop (lg+)
@@ -61,6 +67,13 @@ export default function TeacherDashboard() {
     void loadTests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthed]);
+
+  useEffect(() => {
+    if (!lastRealtimeEventAt) return;
+    setJustUpdated(true);
+    const timeout = setTimeout(() => setJustUpdated(false), 2500);
+    return () => clearTimeout(timeout);
+  }, [lastRealtimeEventAt]);
 
   const testCountByClass = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -159,10 +172,12 @@ export default function TeacherDashboard() {
                 <span
                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                     realtimeStatus === "connected"
-                      ? "animate-pulse bg-emerald-400"
+                      ? justUpdated
+                        ? "animate-pulse bg-emerald-400"
+                        : "bg-emerald-400"
                       : realtimeStatus === "error"
                         ? "bg-red-400"
-                        : "bg-slate-500"
+                        : "animate-pulse bg-slate-500"
                   }`}
                 />
                 {realtimeStatus === "connected"
@@ -195,7 +210,7 @@ export default function TeacherDashboard() {
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Radio className={`h-4 w-4 ${activeTab === "submissions" ? "animate-pulse text-cyan-400" : ""}`} />
+            <Radio className={`h-4 w-4 ${activeTab === "submissions" ? "text-cyan-400" : ""}`} />
             Theo dõi &amp; Chấm bài
           </button>
           <button
